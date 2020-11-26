@@ -695,18 +695,9 @@ namespace Linear_Elasticity
                            parameters.poly_degree,
                            DataOut<dim>::curved_boundary);
 
-    // Check, if the output directory exists
-    std::ifstream output_directory(case_path + "dealii_output");
-    AssertThrow(
-      output_directory,
-      ExcMessage(
-        "Unable to find the output directory. "
-        "By default, this program stores result files in a directory called dealii_output. "
-        "This needs to be located in your case directory, where the parameter file is located as well."));
-
     // Store all files in a seperate folder called dealii_ouput
     std::ofstream output(
-      case_path + "dealii_output/solution-" +
+      case_path + "solution-" +
       std::to_string(time.get_timestep() / parameters.output_interval) +
       ".vtk");
     data_out.write_vtk(output);
