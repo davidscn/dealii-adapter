@@ -377,7 +377,10 @@ namespace Nonlinear_Elasticity
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    adapter.initialize(dof_handler_ref, total_displacement, external_stress);
+    adapter.initialize(dof_handler_ref,
+                       MappingQ1<dim>(),
+                       total_displacement,
+                       external_stress);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
@@ -547,7 +550,7 @@ namespace Nonlinear_Elasticity
       boundary_interface_id != out_of_plane_clamped_mesh_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
-    AssertThrow(boundary_interface_id == adapter.deal_boundary_interface_id,
+    AssertThrow(boundary_interface_id == adapter.dealii_boundary_interface_id,
                 ExcMessage("Wrong interface ID in the Adapter."));
 
     vol_reference = GridTools::volume(triangulation);

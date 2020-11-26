@@ -255,7 +255,7 @@ namespace Linear_Elasticity
                 ExcMessage(error_message));
     AssertThrow(out_of_plane_clamped_mesh_id != interface_boundary_id,
                 ExcMessage(error_message));
-    AssertThrow(interface_boundary_id == adapter.deal_boundary_interface_id,
+    AssertThrow(interface_boundary_id == adapter.dealii_boundary_interface_id,
                 ExcMessage("Wrong interface ID in the Adapter specified"));
 
     // Iterate over all cells and set the IDs
@@ -732,7 +732,7 @@ namespace Linear_Elasticity
 
     // Then, we initialize preCICE i.e. we pass our mesh and coupling
     // information to preCICE
-    adapter.initialize(dof_handler, displacement, stress);
+    adapter.initialize(dof_handler, mapping, displacement, stress);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
     // line replaces the usual 'while( time < end_time)'

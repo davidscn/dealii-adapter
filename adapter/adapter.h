@@ -7,7 +7,7 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe.h>
-#include <deal.II/fe/mapping_q1.h>
+#include <deal.II/fe/mapping_q_generic.h>
 
 #include <precice/SolverInterface.hpp>
 
@@ -35,7 +35,7 @@ namespace Adapter
      *             which is associated with the coupling interface.
      */
     Adapter(const ParameterClass &parameters,
-            const unsigned int    deal_boundary_interface_id);
+            const unsigned int    dealii_boundary_interface_id);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -56,8 +56,9 @@ namespace Adapter
      */
     void
     initialize(const DoFHandler<dim> &dof_handler,
-               const VectorType &     deal_to_precice,
-               VectorType &           precice_to_deal);
+               const Mapping<dim> &   mapping,
+               const VectorType &     dealii_to_precice,
+               VectorType &           precice_to_dealii);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -73,8 +74,8 @@ namespace Adapter
      *             the solver.
      */
     void
-    advance(const VectorType &deal_to_precice,
-            VectorType &      precice_to_deal,
+    advance(const VectorType &dealii_to_precice,
+            VectorType &      precice_to_dealii,
             const double      computed_timestep_length);
 
     /**
@@ -127,7 +128,7 @@ namespace Adapter
     // generation, but is also involved during system assembly. The only thing,
     // one needs to make sure is, that this ID is not given to another part of
     // the boundary e.g. clamped one.
-    const unsigned int deal_boundary_interface_id;
+    const unsigned int dealii_boundary_interface_id;
 
   private:
     // preCICE related initializations
@@ -177,7 +178,7 @@ namespace Adapter
      *        coordinates.
      */
     void
-    format_deal_to_precice(const VectorType &deal_to_precice);
+    format_dealii_to_precice(const VectorType &dealii_to_precice);
 
     /**
      * @brief format_precice_to_deal Takes the std::vector obtained by preCICE
@@ -195,7 +196,7 @@ namespace Adapter
      *        coordinates.
      */
     void
-    format_precice_to_deal(VectorType &precice_to_deal) const;
+    format_precice_to_dealii(VectorType &precice_to_dealii) const;
   };
 
 
@@ -203,12 +204,12 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   Adapter<dim, VectorType, ParameterClass>::Adapter(
     const ParameterClass &parameters,
-    const unsigned int    deal_boundary_interface_id)
+    const unsigned int    dealii_boundary_interface_id)
     : precice(parameters.participant_name,
               parameters.config_file,
               this_mpi_process,
               n_mpi_processes)
-    , deal_boundary_interface_id(deal_boundary_interface_id)
+    , dealii_boundary_interface_id(dealii_boundary_interface_id)
     , mesh_name(parameters.mesh_name)
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
@@ -220,8 +221,9 @@ namespace Adapter
   void
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &dof_handler,
-    const VectorType &     deal_to_precice,
-    VectorType &           precice_to_deal)
+    const Mapping<dim> &   mapping,
+    const VectorType &     dealii_to_precice,
+    VectorType &           precice_to_dealii)
   {
     AssertThrow(
       dim == precice.getDimensions(),
@@ -243,7 +245,7 @@ namespace Adapter
     // Therefore, we extract one component of the vector valued dofs and store
     // them in an IndexSet
     std::set<types::boundary_id> couplingBoundary;
-    couplingBoundary.insert(deal_boundary_interface_id);
+    couplingBoundary.insert(dealii_boundary_interface_id);
 
     const FEValuesExtractors::Scalar x_displacement(0);
 
@@ -293,11 +295,7 @@ namespace Adapter
     // get the coordinates of the interface nodes from deal.ii
     std::map<types::global_dof_index, Point<dim>> support_points;
 
-    // We use here a simple Q1 mapping. In case one has more complex
-    // geomtries, you might want to change this to a higher order mapping.
-    DoFTools::map_dofs_to_support_points(MappingQ1<dim>(),
-                                         dof_handler,
-                                         support_points);
+    DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
 
     // support_points contains now the coordinates of all dofs
     // in the next step, the relevant coordinates are extracted using the
@@ -327,7 +325,7 @@ namespace Adapter
     if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
       {
         // store initial write_data for precice in write_data
-        format_deal_to_precice(deal_to_precice);
+        format_dealii_to_precice(dealii_to_precice);
 
         precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
@@ -348,7 +346,7 @@ namespace Adapter
                                     interface_nodes_ids.data(),
                                     read_data.data());
 
-        format_precice_to_deal(precice_to_deal);
+        format_precice_to_dealii(precice_to_dealii);
       }
   }
 
@@ -357,8 +355,8 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::advance(
-    const VectorType &deal_to_precice,
-    VectorType &      precice_to_deal,
+    const VectorType &dealii_to_precice,
+    VectorType &      precice_to_dealii,
     const double      computed_timestep_length)
   {
     // This is essentially the same as during initialization
@@ -368,7 +366,7 @@ namespace Adapter
     // case write data is required.
     if (precice.isWriteDataRequired(computed_timestep_length))
       {
-        format_deal_to_precice(deal_to_precice);
+        format_dealii_to_precice(dealii_to_precice);
 
         precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
@@ -389,7 +387,7 @@ namespace Adapter
                                     interface_nodes_ids.data(),
                                     read_data.data());
 
-        format_precice_to_deal(precice_to_deal);
+        format_precice_to_dealii(precice_to_dealii);
       }
   }
 
@@ -397,8 +395,8 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
-    const VectorType &deal_to_precice)
+  Adapter<dim, VectorType, ParameterClass>::format_dealii_to_precice(
+    const VectorType &dealii_to_precice)
   {
     // Assumption: x index is in the same position as y index in each IndexSet
     // In general, higher order support points in the element are first
@@ -413,13 +411,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        write_data[dim * i]       = deal_to_precice[*x_comp];
-        write_data[(dim * i) + 1] = deal_to_precice[*y_comp];
+        write_data[dim * i]       = dealii_to_precice[*x_comp];
+        write_data[(dim * i) + 1] = dealii_to_precice[*y_comp];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            write_data[(dim * i) + 2] = deal_to_precice[*z_comp];
+            write_data[(dim * i) + 2] = dealii_to_precice[*z_comp];
             ++z_comp;
           }
       }
@@ -429,8 +427,8 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  Adapter<dim, VectorType, ParameterClass>::format_precice_to_deal(
-    VectorType &precice_to_deal) const
+  Adapter<dim, VectorType, ParameterClass>::format_precice_to_dealii(
+    VectorType &precice_to_dealii) const
   {
     // This is the opposite direction as above. See comment there.
     auto x_comp = coupling_dofs_x_comp.begin();
@@ -439,13 +437,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        precice_to_deal[*x_comp] = read_data[dim * i];
-        precice_to_deal[*y_comp] = read_data[(dim * i) + 1];
+        precice_to_dealii[*x_comp] = read_data[dim * i];
+        precice_to_dealii[*y_comp] = read_data[(dim * i) + 1];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            precice_to_deal[*z_comp] = read_data[(dim * i) + 2];
+            precice_to_dealii[*z_comp] = read_data[(dim * i) + 2];
             ++z_comp;
           }
       }
