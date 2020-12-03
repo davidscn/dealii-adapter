@@ -1,0 +1,80 @@
+Write tester starting... 
+---[precice] [0m Configuring preCICE with configuration "precice-config.xml"
+---[precice] [0m I am participant "tester"
+Write tester defining mesh: 36 nodes 
+---[precice] [0m Setting up master communication to coupling partner/s
+---[precice] [0m Masters are connected
+---[precice] [0m Setting up preliminary slaves communication to coupling partner/s
+---[precice] [0m Receive global mesh dealii-mesh
+---[precice] [0m Prepare partition for mesh tester-mesh
+---[precice] [0m Gather mesh tester-mesh
+---[precice] [0m Send global mesh tester-mesh
+---[precice] [0m Setting up slaves communication to coupling partner/s
+---[precice] [0m Slaves are connected
+---[precice] [0m Compute read mapping from mesh "dealii-mesh" to mesh "tester-mesh".
+---[precice] [0m it 1 | dt# 1 | t 0 of 1 | dt 0.2 | max dt 0.2 | ongoing yes | dt complete no | 
+Write tester reading initial data 
+Write tester writing coupling data 
+Write tester advancing in time
+---[precice] [0m Time window completed
+---[precice] [0m it 1 | dt# 2 | t 0.2 of 1 | dt 0.2 | max dt 0.2 | ongoing yes | dt complete yes | 
+Write tester reading coupling data 
+Write tester writing coupling data 
+Write tester advancing in time
+---[precice] [0m Time window completed
+---[precice] [0m it 1 | dt# 3 | t 0.4 of 1 | dt 0.2 | max dt 0.2 | ongoing yes | dt complete yes | 
+Write tester reading coupling data 
+Write tester writing coupling data 
+Write tester advancing in time
+---[precice] [0m Time window completed
+---[precice] [0m it 1 | dt# 4 | t 0.6 of 1 | dt 0.2 | max dt 0.2 | ongoing yes | dt complete yes | 
+Write tester reading coupling data 
+Write tester writing coupling data 
+Write tester advancing in time
+---[precice] [0m Time window completed
+---[precice] [0m it 1 | dt# 5 | t 0.8 of 1 | dt 0.2 | max dt 0.2 | ongoing yes | dt complete yes | 
+Write tester reading coupling data 
+Write tester writing coupling data 
+Write tester advancing in time
+---[precice] [0m Time window completed
+---[precice] [0m it 1 | dt# 6 | t 1 of 1 | dt 0.2 | max dt 0.2 | ongoing no | dt complete yes | 
+Write tester reading coupling data 
+Vertex:  0 X: -0.0000000000 Y: -0.0000000000
+Vertex:  1 X:  0.0000215019 Y: -0.0000006047
+Vertex:  2 X:  0.0000161347 Y:  0.0000014630
+Vertex:  3 X: -0.0000000000 Y:  0.0000023382
+Vertex:  4 X: -0.0000161347 Y:  0.0000014630
+Vertex:  5 X: -0.0000215019 Y: -0.0000006047
+Vertex:  6 X: -0.0000000000 Y: -0.0000000000
+Vertex:  7 X: -0.0012959890 Y: -0.0347917467
+Vertex:  8 X: -0.0008639787 Y: -0.0347917185
+Vertex:  9 X: -0.0004319911 Y: -0.0347917393
+Vertex: 10 X: -0.0000000000 Y: -0.0347917400
+Vertex: 11 X:  0.0004319911 Y: -0.0347917393
+Vertex: 12 X:  0.0008639787 Y: -0.0347917185
+Vertex: 13 X:  0.0012959890 Y: -0.0347917467
+Vertex: 14 X: -0.0003151145 Y: -0.0005143051
+Vertex: 15 X: -0.0005759503 Y: -0.0018489063
+Vertex: 16 X: -0.0007827877 Y: -0.0038638293
+Vertex: 17 X: -0.0009436055 Y: -0.0064123097
+Vertex: 18 X: -0.0010647985 Y: -0.0093697223
+Vertex: 19 X: -0.0011537037 Y: -0.0126310257
+Vertex: 20 X: -0.0012152172 Y: -0.0161092494
+Vertex: 21 X: -0.0012557145 Y: -0.0197338346
+Vertex: 22 X: -0.0012792290 Y: -0.0234493612
+Vertex: 23 X: -0.0012912586 Y: -0.0272144439
+Vertex: 24 X: -0.0012952655 Y: -0.0310006929
+Vertex: 25 X:  0.0003151145 Y: -0.0005143051
+Vertex: 26 X:  0.0005759503 Y: -0.0018489063
+Vertex: 27 X:  0.0007827877 Y: -0.0038638293
+Vertex: 28 X:  0.0009436055 Y: -0.0064123097
+Vertex: 29 X:  0.0010647985 Y: -0.0093697223
+Vertex: 30 X:  0.0011537037 Y: -0.0126310257
+Vertex: 31 X:  0.0012152172 Y: -0.0161092494
+Vertex: 32 X:  0.0012557145 Y: -0.0197338346
+Vertex: 33 X:  0.0012792290 Y: -0.0234493612
+Vertex: 34 X:  0.0012912586 Y: -0.0272144439
+Vertex: 35 X:  0.0012952655 Y: -0.0310006929
+
+Write tester closing...
+---[precice] [0m Implicitly finalizing in destructor
