@@ -24,10 +24,10 @@ jobs:
                   git checkout FETCH_HEAD && \
                   cd linear_elasticity && \
                   cmake . && \
-                  make && \
+                  make all && \
                   cd ../nonlinear_elasticity && \
                   cmake . && \
-                  make";
+                  make all";
          
          echo $command
          
