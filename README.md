@@ -1,5 +1,6 @@
 # dealii-adapter
 ![Building](https://github.com/DavidSCN/dealii-adapter/workflows/Building/badge.svg)
+![Solver CI](https://github.com/DavidSCN/dealii-adapter/workflows/Solver%20CI/badge.svg)
 <a style="text-decoration: none" href="https://travis-ci.org/precice/dealii-adapter" target="_blank">
     <img src="https://travis-ci.org/precice/dealii-adapter.svg?branch=master" alt="Build status">
 </a>
