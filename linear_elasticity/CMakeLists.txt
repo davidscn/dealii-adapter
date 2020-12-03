@@ -66,3 +66,39 @@ SET_PROPERTY(TARGET  ${TARGET}  APPEND  PROPERTY  COMPILE_DEFINITIONS
             GIT_BRANCH="${GIT_BRANCH}"
             GIT_REVISION="${GIT_REVISION}"
             GIT_SHORTREV="${GIT_SHORTREV}")
+
+IF(${CMAKE_VERSION} VERSION_GREATER "3.16.0")
+TARGET_PRECOMPILE_HEADERS(${TARGET}
+                        PRIVATE
+                        <deal.II/base/function.h>
+			<deal.II/base/parameter_handler.h>
+                        <deal.II/base/quadrature_lib.h>
+                        <deal.II/base/revision.h>
+                        <deal.II/base/tensor.h>
+                        <deal.II/base/timer.h>
+                        <deal.II/dofs/dof_accessor.h>
+                        <deal.II/dofs/dof_handler.h>
+                        <deal.II/dofs/dof_tools.h>
+                        <deal.II/fe/fe_q.h>
+                        <deal.II/fe/fe_system.h>
+                        <deal.II/fe/fe_values.h>
+                        <deal.II/fe/mapping_q_eulerian.h>
+                        <deal.II/grid/grid_generator.h>
+                        <deal.II/grid/grid_refinement.h>
+                        <deal.II/grid/tria.h>
+                        <deal.II/grid/tria_accessor.h>
+                        <deal.II/grid/tria_iterator.h>
+                        <deal.II/lac/affine_constraints.h>
+                        <deal.II/lac/dynamic_sparsity_pattern.h>
+                        <deal.II/lac/full_matrix.h>
+                        <deal.II/lac/precondition.h>
+                        <deal.II/lac/solver_cg.h>
+                        <deal.II/lac/sparse_direct.h>
+                        <deal.II/lac/sparse_matrix.h>
+                        <deal.II/lac/vector.h>
+                        <deal.II/numerics/data_out.h>
+                        <deal.II/numerics/matrix_tools.h>
+                        <deal.II/numerics/vector_tools.h>
+                        <iostream>)
+MESSAGE(STATUS "Using precompiled header files")
+ENDIF()
