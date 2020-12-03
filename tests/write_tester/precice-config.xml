@@ -26,10 +26,11 @@
       <use-mesh name="tester-mesh" from="tester" />
       <write-data name="Displacement" mesh="dealii-mesh" />
       <read-data name="Stress" mesh="dealii-mesh" />
-      <mapping:nearest-neighbor
+      <mapping:rbf-thin-plate-splines
         direction="read"
         from="tester-mesh"
         to="dealii-mesh"
+        use-qr-decomposition="true"
         constraint="consistent" />
     </participant>
 
@@ -42,6 +43,7 @@
         direction="read"
         from="dealii-mesh"
         to="tester-mesh"
+        use-qr-decomposition="true"
         constraint="consistent" />
     </participant>
 
