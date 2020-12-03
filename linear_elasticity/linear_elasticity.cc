@@ -695,7 +695,6 @@ namespace Linear_Elasticity
                            parameters.poly_degree,
                            DataOut<dim>::curved_boundary);
 
-    // Store all files in a seperate folder called dealii_ouput
     std::ofstream output(
       case_path + "solution-" +
       std::to_string(time.get_timestep() / parameters.output_interval) +
@@ -723,7 +722,8 @@ namespace Linear_Elasticity
 
     // Then, we initialize preCICE i.e. we pass our mesh and coupling
     // information to preCICE
-    adapter.initialize(dof_handler, mapping, displacement, stress);
+    adapter.initialize(
+      dof_handler, mapping, QGauss<dim - 1>(quad_order), displacement, stress);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
     // line replaces the usual 'while( time < end_time)'

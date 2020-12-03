@@ -7,6 +7,7 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe.h>
+#include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/mapping_q_generic.h>
 
 #include <precice/SolverInterface.hpp>
@@ -55,10 +56,11 @@ namespace Adapter
      *             participants.
      */
     void
-    initialize(const DoFHandler<dim> &dof_handler,
-               const Mapping<dim> &   mapping,
-               const VectorType &     dealii_to_precice,
-               VectorType &           precice_to_dealii);
+    initialize(const DoFHandler<dim> &    dof_handler,
+               const Mapping<dim> &       mapping,
+               const Quadrature<dim - 1> &face_quadrature,
+               const VectorType &         dealii_to_precice,
+               VectorType &               precice_to_dealii);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -163,6 +165,10 @@ namespace Adapter
     std::vector<VectorType> old_state_data;
     double                  old_time_value;
 
+
+    void
+    write_from_quadrature(const VectorType &format_dealii_to_precice);
+
     /**
      * @brief format_deal_to_precice Formats a global deal.II vector of type
      *        VectorType to a std::vector for preCICE. This functions is only
@@ -220,10 +226,11 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::initialize(
-    const DoFHandler<dim> &dof_handler,
-    const Mapping<dim> &   mapping,
-    const VectorType &     dealii_to_precice,
-    VectorType &           precice_to_dealii)
+    const DoFHandler<dim> &    dof_handler,
+    const Mapping<dim> &       mapping,
+    const Quadrature<dim - 1> &face_quadrature,
+    const VectorType &         dealii_to_precice,
+    VectorType &               precice_to_dealii)
   {
     AssertThrow(
       dim == precice.getDimensions(),
@@ -240,49 +247,43 @@ namespace Adapter
     read_data_id  = precice.getDataID(read_data_name, mesh_id);
     write_data_id = precice.getDataID(write_data_name, mesh_id);
 
-
-    // get the number of interface nodes from deal.II
-    // Therefore, we extract one component of the vector valued dofs and store
-    // them in an IndexSet
-    std::set<types::boundary_id> couplingBoundary;
-    couplingBoundary.insert(dealii_boundary_interface_id);
-
-    const FEValuesExtractors::Scalar x_displacement(0);
-
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    dof_handler.get_fe().component_mask(
-                                      x_displacement),
-                                    coupling_dofs_x_comp,
-                                    couplingBoundary);
-
-    // The dofs related to the y-component are needed as well. See also
-    // comment below, why this is necessary.
-    const FEValuesExtractors::Scalar y_displacement(1);
-
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    dof_handler.get_fe().component_mask(
-                                      y_displacement),
-                                    coupling_dofs_y_comp,
-                                    couplingBoundary);
-    if (dim == 3)
-      {
-        const FEValuesExtractors::Scalar z_displacement(2);
-        DoFTools::extract_boundary_dofs(dof_handler,
-                                        dof_handler.get_fe().component_mask(
-                                          z_displacement),
-                                        coupling_dofs_z_comp,
-                                        couplingBoundary);
-      }
-
-    n_interface_nodes = coupling_dofs_x_comp.n_elements();
-
-    std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
-              << std::endl;
-
     // Set up a vector to pass the node positions to preCICE. Each node is
     // specified once. One needs to specify in the precice-config.xml, whether
     // the data is vector valued or not.
-    std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
+    std::vector<double> interface_nodes_positions;
+
+    // TODO: Find a suitable guess for the number of interface points
+    interface_nodes_positions.reserve(100);
+
+    FEFaceValues<dim> fe_face_values(mapping,
+                                     dof_handler.get_fe(),
+                                     face_quadrature,
+                                     update_quadrature_points);
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      for (const auto &face : cell->face_iterators())
+        if (face->at_boundary() == true &&
+            face->boundary_id() == dealii_boundary_interface_id)
+          {
+            fe_face_values.reinit(cell, face);
+
+            for (const auto f_q_point :
+                 fe_face_values.quadrature_point_indices())
+              {
+                const auto &q_point =
+                  fe_face_values.quadrature_point(f_q_point);
+                for (uint d = 0; d < dim; ++d)
+                  interface_nodes_positions.emplace_back(q_point[d]);
+              }
+          }
+
+    for (const auto i : interface_nodes_positions)
+      std::cout << i << std::endl;
+
+    n_interface_nodes = interface_nodes_positions.size() / dim;
+
+    std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
+              << std::endl;
 
     // Set up the appropriate size of the data container needed for data
     // exchange. Here, we deal with a vector valued problem for read and write
@@ -293,25 +294,26 @@ namespace Adapter
     interface_nodes_ids.resize(n_interface_nodes);
 
     // get the coordinates of the interface nodes from deal.ii
-    std::map<types::global_dof_index, Point<dim>> support_points;
+    //    std::map<types::global_dof_index, Point<dim>> support_points;
 
-    DoFTools::map_dofs_to_support_points(mapping, dof_handler, support_points);
+    //    DoFTools::map_dofs_to_support_points(mapping, dof_handler,
+    //    support_points);
 
     // support_points contains now the coordinates of all dofs
     // in the next step, the relevant coordinates are extracted using the
     // IndexSet with the extracted coupling_dofs.
 
     // preCICE expects all data in the format [x0, y0, z0, x1, y1 ...]
-    int node_position_iterator = 0;
-    for (auto element : coupling_dofs_x_comp)
-      {
-        for (int i = 0; i < dim; ++i)
-          interface_nodes_positions[node_position_iterator * dim + i] =
-            support_points[element][i];
+    //    int node_position_iterator = 0;
+    //    for (auto element : coupling_dofs_x_comp)
+    //      {
+    //        for (int i = 0; i < dim; ++i)
+    //          interface_nodes_positions[node_position_iterator * dim + i] =
+    //            support_points[element][i];
 
-        ++node_position_iterator;
-      }
-
+    //        ++node_position_iterator;
+    //      }
+    // Reading: use Quadrature(points)
     // pass node coordinates to precice
     precice.setMeshVertices(mesh_id,
                             n_interface_nodes,
@@ -500,6 +502,16 @@ namespace Adapter
 
         precice.markActionFulfilled(
           precice::constants::actionReadIterationCheckpoint());
+      }
+  }
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  void
+  Adapter<dim, VectorType, ParameterClass>::write_from_quadrature(
+    const VectorType &dealii_to_precice)
+  {
+    for (uint i = 0; i < n_interface_nodes; ++i)
+      {
       }
   }
 } // namespace Adapter

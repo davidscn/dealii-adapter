@@ -379,6 +379,7 @@ namespace Nonlinear_Elasticity
     // Here, all information concerning the coupling is passed to preCICE
     adapter.initialize(dof_handler_ref,
                        MappingQ1<dim>(),
+                       QGauss<dim - 1>(parameters.poly_degree + 2),
                        total_displacement,
                        external_stress);
 
