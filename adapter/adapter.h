@@ -59,8 +59,7 @@ namespace Adapter
     initialize(const DoFHandler<dim> &    dof_handler,
                const Mapping<dim> &       mapping,
                const Quadrature<dim - 1> &face_quadrature,
-               const VectorType &         dealii_to_precice,
-               VectorType &               precice_to_dealii);
+               const VectorType &         dealii_to_precice);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -134,6 +133,18 @@ namespace Adapter
     // the boundary e.g. clamped one.
     const unsigned int dealii_boundary_interface_id;
 
+
+    void
+    read_on_quadrature_point(std::array<double, dim> &data,
+                             const unsigned int       q_index) const;
+
+
+    auto
+    begin_interface_IDs()
+    {
+      return interface_nodes_ids.begin();
+    }
+
   private:
     // preCICE related initializations
     // These variables are specified and read from the parameter file
@@ -166,9 +177,6 @@ namespace Adapter
                                const DoFHandler<dim> &    dof_handler,
                                const Quadrature<dim - 1> &face_quadrature);
 
-    void
-    read_for_quadrature_node(std::array<double, dim> &data,
-                             const unsigned int       q_number) const;
 
     /**
      * @brief format_deal_to_precice Formats a global deal.II vector of type
@@ -230,8 +238,7 @@ namespace Adapter
     const DoFHandler<dim> &    dof_handler,
     const Mapping<dim> &       mapping,
     const Quadrature<dim - 1> &face_quadrature,
-    const VectorType &         dealii_to_precice,
-    VectorType &)
+    const VectorType &         dealii_to_precice)
   {
     AssertThrow(
       dim == precice.getDimensions(),
@@ -248,12 +255,8 @@ namespace Adapter
     read_data_id  = precice.getDataID(read_data_name, mesh_id);
     write_data_id = precice.getDataID(write_data_name, mesh_id);
 
-    // Set up a vector to pass the node positions to preCICE. Each node is
-    // specified once. One needs to specify in the precice-config.xml, whether
-    // the data is vector valued or not.
-    //    std::vector<double> interface_nodes_positions;
 
-    // TODO: Find a suitable guess for the number of interface points
+    // TODO: Find a suitable guess for the number of interface points (optional)
     interface_nodes_ids.reserve(20);
     std::array<double, dim> vertex;
     FEFaceValues<dim>       fe_face_values(mapping,
@@ -293,18 +296,18 @@ namespace Adapter
     precice.initialize();
 
     // write initial writeData to preCICE if required
-    //    if
-    (precice.isActionRequired(precice::constants::actionWriteInitialData()))
-    {
-      write_all_quadrature_nodes(dealii_to_precice,
-                                 mapping,
-                                 dof_handler,
-                                 face_quadrature);
+    if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
+      {
+        write_all_quadrature_nodes(dealii_to_precice,
+                                   mapping,
+                                   dof_handler,
+                                   face_quadrature);
 
-      precice.markActionFulfilled(precice::constants::actionWriteInitialData());
+        precice.markActionFulfilled(
+          precice::constants::actionWriteInitialData());
 
-      precice.initializeData();
-    }
+        precice.initializeData();
+      }
 
     // read initial readData from preCICE if required for the first time step
     if (precice.isReadDataAvailable())
@@ -339,13 +342,6 @@ namespace Adapter
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice.advance(computed_timestep_length);
-
-    // Here, we obtain data from another participant. Again, we insert the
-    // data in our global vector by calling format_precice_to_deal
-    if (precice.isReadDataAvailable())
-      {
-        // read data
-      }
   }
 
 
@@ -450,12 +446,13 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  Adapter<dim, VectorType, ParameterClass>::read_for_quadrature_node(
-    std::array<double, dim> &,
-    const unsigned int) const
+  Adapter<dim, VectorType, ParameterClass>::read_on_quadrature_point(
+    std::array<double, dim> &data,
+    const unsigned int       q_index) const
   {
-    //    for (uint d = 0; d < dim; ++d)
-    //      data[d] = read_data[q_number * dim + d];
+    // TODO: Check if this still makes sense
+    //      if (precice.isReadDataAvailable())
+    precice.readVectorData(read_data_id, q_index, data.data());
   }
 } // namespace Adapter
 

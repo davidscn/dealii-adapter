@@ -118,7 +118,6 @@ namespace Linear_Elasticity
     Vector<double> old_displacement;
     Vector<double> displacement;
     Vector<double> old_stress;
-    Vector<double> stress;
     Vector<double> system_rhs;
 
     // Body forces e.g. gravity. Values are specified in the input file
@@ -313,9 +312,9 @@ namespace Linear_Elasticity
 
     system_rhs.reinit(dof_handler.n_dofs());
     old_stress.reinit(dof_handler.n_dofs());
-    stress.reinit(dof_handler.n_dofs());
 
-    body_force_vector.reinit(dof_handler.n_dofs());
+    if (body_force_enabled)
+      body_force_vector.reinit(dof_handler.n_dofs());
 
     std::cout.imbue(std::locale(""));
     std::cout << "Triangulation:"
@@ -484,46 +483,48 @@ namespace Linear_Elasticity
                                      update_values | update_quadrature_points |
                                        update_JxW_values);
 
-    const unsigned int dofs_per_cell   = fe.dofs_per_cell;
-    const unsigned int n_face_q_points = face_quadrature_formula.size();
+    const unsigned int dofs_per_cell = fe.dofs_per_cell;
 
     Vector<double>                       cell_rhs(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
     // In order to get the local fe values
-    std::vector<Vector<double>> local_stress(n_face_q_points,
-                                             Vector<double>(dim));
+    std::array<double, dim> local_stress;
+    auto                    q_index = adapter.begin_interface_IDs();
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
         cell_rhs = 0;
 
-        // Assemblw the right-hand side force vector each timestep
+        // Assemble the right-hand side force vector each timestep
         // by applying contributions only on the coupling interface
         for (const auto &face : cell->face_iterators())
           if (face->at_boundary() == true &&
               face->boundary_id() == interface_boundary_id)
             {
               fe_face_values.reinit(cell, face);
-              // Extract relevant data from the global stress vector by using
-              // 'get_function_values()'
               // In contrast to the nonlinear solver, no pull back is performed.
               // The equilibrium is stated in reference configuration, but only
               // valid for very small deformations
-              fe_face_values.get_function_values(stress, local_stress);
 
-              for (unsigned int f_q_point = 0; f_q_point < n_face_q_points;
-                   ++f_q_point)
-                for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                  {
-                    const unsigned int component_i =
-                      fe.system_to_component_index(i).first;
+              for (const auto f_q_point :
+                   fe_face_values.quadrature_point_indices())
+                {
+                  adapter.read_on_quadrature_point(local_stress, *q_index);
+                  ++q_index;
+                  for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                    {
+                      const unsigned int component_i =
+                        fe.system_to_component_index(i).first;
 
-                    cell_rhs(i) += fe_face_values.shape_value(i, f_q_point) *
-                                   local_stress[f_q_point][component_i] *
-                                   fe_face_values.JxW(f_q_point);
-                  }
+                      AssertIndexRange(component_i, dim);
+
+                      cell_rhs(i) += fe_face_values.shape_value(i, f_q_point) *
+                                     local_stress[component_i] *
+                                     fe_face_values.JxW(f_q_point);
+                    }
+                }
             }
 
         // Local dofs to global
@@ -552,6 +553,8 @@ namespace Linear_Elasticity
 
     tmp = system_rhs;
 
+    // TODO: old_stress is a global vector, it might be better to store just the
+    // affected dofs of the boundary elements
     system_rhs *= time.get_delta_t() * parameters.theta;
     system_rhs.add(time.get_delta_t() * (1 - parameters.theta), old_stress);
     old_stress = tmp;
@@ -571,6 +574,7 @@ namespace Linear_Elasticity
 
     // Copy the system_matrix every timestep, since applying the BC deletes
     // certain rows and columns
+    // TODO: Check this again
     system_matrix = 0.0;
     system_matrix.copy_from(stepping_matrix);
 
@@ -722,8 +726,10 @@ namespace Linear_Elasticity
 
     // Then, we initialize preCICE i.e. we pass our mesh and coupling
     // information to preCICE
-    adapter.initialize(
-      dof_handler, mapping, QGauss<dim - 1>(quad_order), displacement, stress);
+    adapter.initialize(dof_handler,
+                       mapping,
+                       QGauss<dim - 1>(quad_order),
+                       displacement);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
     // line replaces the usual 'while( time < end_time)'
