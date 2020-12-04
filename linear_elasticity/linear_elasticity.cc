@@ -760,7 +760,11 @@ namespace Linear_Elasticity
         // participant to finish their time step. Therefore, we measure the
         // timings around this functionality
         timer.enter_subsection("Advance adapter");
-        adapter.advance(displacement, stress, time.get_delta_t());
+        adapter.advance(displacement,
+                        dof_handler,
+                        mapping,
+                        QGauss<dim - 1>(quad_order),
+                        time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 
         // Next, we reload the data we have previosuly stored in the beginning

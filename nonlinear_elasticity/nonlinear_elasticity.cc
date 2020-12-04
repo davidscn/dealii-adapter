@@ -48,7 +48,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/adapter.h"
+#include "../adapter/adapter_smp.h"
 #include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
 #include "include/parameter_handling.h"
@@ -379,7 +379,6 @@ namespace Nonlinear_Elasticity
     // Here, all information concerning the coupling is passed to preCICE
     adapter.initialize(dof_handler_ref,
                        MappingQ1<dim>(),
-                       QGauss<dim - 1>(parameters.poly_degree + 2),
                        total_displacement,
                        external_stress);
 
