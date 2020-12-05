@@ -140,7 +140,7 @@ namespace Adapter
 
 
     auto
-    begin_interface_IDs()
+    begin_interface_IDs() const
     {
       return interface_nodes_ids.begin();
     }
@@ -176,42 +176,6 @@ namespace Adapter
                                const Mapping<dim> &       mapping,
                                const DoFHandler<dim> &    dof_handler,
                                const Quadrature<dim - 1> &face_quadrature);
-
-
-    /**
-     * @brief format_deal_to_precice Formats a global deal.II vector of type
-     *        VectorType to a std::vector for preCICE. This functions is only
-     *        used internally in the class and should not be called in the
-     *        solver.
-     *
-     * @param[in] deal_to_precice Global deal.II vector of VectorType. The
-     *            result (preCICE specific vector) is stored in the class in
-     *            the variable 'write_data'.
-     *
-     * @note  The order, in which preCICE obtains data from the solver, needs
-     *        to be consistent with the order of the initially passed vertices
-     *        coordinates.
-     */
-    void
-    format_dealii_to_precice(const VectorType &dealii_to_precice);
-
-    /**
-     * @brief format_precice_to_deal Takes the std::vector obtained by preCICE
-     *        in 'read_data' and inserts the values to the right position in
-     *        the global deal.II vector of size n_global_dofs. This is the
-     *        opposite functionality as @p foramt_precice_to_deal(). This
-     *        functions is only used internally in the class and should not
-     *        be called in the solver.
-     *
-     * @param[out] precice_to_deal Global deal.II vector of VectorType and
-     *             size n_global_dofs.
-     *
-     * @note  The order, in which preCICE obtains data from the solver, needs
-     *        to be consistent with the order of the initially passed vertices
-     *        coordinates.
-     */
-    void
-    format_precice_to_dealii(VectorType &precice_to_dealii) const;
   };
 
 
@@ -284,9 +248,6 @@ namespace Adapter
               }
           }
 
-    //    for (const auto i : interface_nodes_positions)
-    //      std::cout << i << std::endl;
-
     n_interface_nodes = interface_nodes_ids.size();
 
     std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
@@ -308,12 +269,6 @@ namespace Adapter
 
         precice.initializeData();
       }
-
-    // read initial readData from preCICE if required for the first time step
-    if (precice.isReadDataAvailable())
-      {
-        // read data
-      }
   }
 
 
@@ -327,17 +282,11 @@ namespace Adapter
     const Quadrature<dim - 1> &face_quadrature,
     const double               computed_timestep_length)
   {
-    // This is essentially the same as during initialization
-    // We have already all IDs and just need to convert our obtained data to
-    // the preCICE compatible 'write_data' vector, which is done in the
-    // format_deal_to_precice function. All this is of course only done in
-    // case write data is required.
     if (precice.isWriteDataRequired(computed_timestep_length))
       write_all_quadrature_nodes(dealii_to_precice,
                                  mapping,
                                  dof_handler,
                                  face_quadrature);
-
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
@@ -450,7 +399,7 @@ namespace Adapter
     std::array<double, dim> &data,
     const unsigned int       q_index) const
   {
-    // TODO: Check if this still makes sense
+    // TODO: Check if the if statement still makes sense
     //      if (precice.isReadDataAvailable())
     precice.readVectorData(read_data_id, q_index, data.data());
   }
