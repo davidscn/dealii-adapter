@@ -37,6 +37,7 @@
 #include <iostream>
 
 #include "../adapter/adapter.h"
+#include "../adapter/q_equidistant.h"
 #include "../adapter/time.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
@@ -726,9 +727,12 @@ namespace Linear_Elasticity
 
     // Then, we initialize preCICE i.e. we pass our mesh and coupling
     // information to preCICE
+    // TODO: Distinguish between read and write data
+
+    // TODO: generalize quadrature formula and open an exclusive class
     adapter.initialize(dof_handler,
                        mapping,
-                       QGauss<dim - 1>(quad_order),
+                       QEquidistant<dim - 1>(quad_order),
                        displacement);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
@@ -769,7 +773,7 @@ namespace Linear_Elasticity
         adapter.advance(displacement,
                         dof_handler,
                         mapping,
-                        QGauss<dim - 1>(quad_order),
+                        QEquidistant<dim - 1>(quad_order),
                         time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 

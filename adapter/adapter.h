@@ -12,6 +12,7 @@
 
 #include <precice/SolverInterface.hpp>
 
+#include "q_equidistant.h"
 #include "time.h"
 
 namespace Adapter
