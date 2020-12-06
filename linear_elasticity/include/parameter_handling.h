@@ -220,7 +220,8 @@ namespace Linear_Elasticity
       std::string scenario;
       std::string config_file;
       std::string participant_name;
-      std::string mesh_name;
+      std::string read_mesh_name;
+      std::string write_mesh_name;
       std::string read_data_name;
       std::string write_data_name;
 
@@ -251,10 +252,15 @@ namespace Linear_Elasticity
           Patterns::Anything(),
           "Name of the participant in the precice-config.xml file");
         prm.declare_entry(
-          "Mesh name",
-          "dealii-mesh",
+          "Read mesh name",
+          "read-mesh",
           Patterns::Anything(),
-          "Name of the coupling mesh in the precice-config.xml file");
+          "Name of the read coupling mesh in the precice-config.xml file");
+        prm.declare_entry(
+          "Write mesh name",
+          "write-mesh",
+          Patterns::Anything(),
+          "Name of the write coupling mesh in the precice-config.xml file");
         prm.declare_entry(
           "Read data name",
           "received-data",
@@ -277,7 +283,8 @@ namespace Linear_Elasticity
         scenario         = prm.get("Scenario");
         config_file      = prm.get("precice config-file");
         participant_name = prm.get("Participant name");
-        mesh_name        = prm.get("Mesh name");
+        read_mesh_name   = prm.get("Read mesh name");
+        write_mesh_name  = prm.get("Write mesh name");
         read_data_name   = prm.get("Read data name");
         write_data_name  = prm.get("Write data name");
       }

@@ -59,7 +59,8 @@ namespace Adapter
     void
     initialize(const DoFHandler<dim> &    dof_handler,
                const Mapping<dim> &       mapping,
-               const Quadrature<dim - 1> &face_quadrature,
+               const Quadrature<dim - 1> &write_quadrature,
+               const Quadrature<dim - 1> &read_quadrature,
                const VectorType &         dealii_to_precice);
 
     /**
@@ -79,7 +80,7 @@ namespace Adapter
     advance(const VectorType &         dealii_to_precice,
             const DoFHandler<dim> &    dof_handler,
             const Mapping<dim> &       mapping,
-            const Quadrature<dim - 1> &face_quadrature,
+            const Quadrature<dim - 1> &write_quadrature,
             const double               computed_timestep_length);
 
     /**
@@ -143,13 +144,14 @@ namespace Adapter
     auto
     begin_interface_IDs() const
     {
-      return interface_nodes_ids.begin();
+      return read_nodes_ids.begin();
     }
 
   private:
     // preCICE related initializations
     // These variables are specified and read from the parameter file
-    const std::string mesh_name;
+    const std::string read_mesh_name;
+    const std::string write_mesh_name;
     const std::string read_data_name;
     const std::string write_data_name;
 
@@ -158,15 +160,16 @@ namespace Adapter
     static constexpr unsigned int n_mpi_processes  = 1;
 
     // These IDs are given by preCICE during initialization
-    int mesh_id;
+    int read_mesh_id;
+    int write_mesh_id;
     int read_data_id;
     int write_data_id;
-    int n_interface_nodes;
 
 
     // Data containers which are passed to preCICE in an appropriate preCICE
     // specific format
-    std::vector<int> interface_nodes_ids;
+    std::vector<int> read_nodes_ids;
+    std::vector<int> write_nodes_ids;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
@@ -176,7 +179,13 @@ namespace Adapter
     write_all_quadrature_nodes(const VectorType &         data,
                                const Mapping<dim> &       mapping,
                                const DoFHandler<dim> &    dof_handler,
-                               const Quadrature<dim - 1> &face_quadrature);
+                               const Quadrature<dim - 1> &write_quadrature);
+
+    void
+    set_mesh_vertices(const Mapping<dim> &       mapping,
+                      const DoFHandler<dim> &    dof_handler,
+                      const Quadrature<dim - 1> &quadrature,
+                      const bool                 is_read_mesh);
   };
 
 
@@ -190,7 +199,8 @@ namespace Adapter
               this_mpi_process,
               n_mpi_processes)
     , dealii_boundary_interface_id(dealii_boundary_interface_id)
-    , mesh_name(parameters.mesh_name)
+    , read_mesh_name(parameters.read_mesh_name)
+    , write_mesh_name(parameters.write_mesh_name)
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
   {}
@@ -202,7 +212,8 @@ namespace Adapter
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &    dof_handler,
     const Mapping<dim> &       mapping,
-    const Quadrature<dim - 1> &face_quadrature,
+    const Quadrature<dim - 1> &write_quadrature,
+    const Quadrature<dim - 1> &read_quadrature,
     const VectorType &         dealii_to_precice)
   {
     AssertThrow(
@@ -216,42 +227,17 @@ namespace Adapter
 
     // get precice specific IDs from precice and store them in the class
     // they are later needed for data transfer
-    mesh_id       = precice.getMeshID(mesh_name);
-    read_data_id  = precice.getDataID(read_data_name, mesh_id);
-    write_data_id = precice.getDataID(write_data_name, mesh_id);
+    read_mesh_id  = precice.getMeshID(read_mesh_name);
+    read_data_id  = precice.getDataID(read_data_name, read_mesh_id);
+    write_mesh_id = precice.getMeshID(write_mesh_name);
+    write_data_id = precice.getDataID(write_data_name, write_mesh_id);
 
+    set_mesh_vertices(mapping, dof_handler, write_quadrature, false);
+    set_mesh_vertices(mapping, dof_handler, read_quadrature, true);
 
-    // TODO: Find a suitable guess for the number of interface points (optional)
-    interface_nodes_ids.reserve(20);
-    std::array<double, dim> vertex;
-    FEFaceValues<dim>       fe_face_values(mapping,
-                                     dof_handler.get_fe(),
-                                     face_quadrature,
-                                     update_quadrature_points);
-
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      for (const auto &face : cell->face_iterators())
-        if (face->at_boundary() == true &&
-            face->boundary_id() == dealii_boundary_interface_id)
-          {
-            fe_face_values.reinit(cell, face);
-
-            for (const auto f_q_point :
-                 fe_face_values.quadrature_point_indices())
-              {
-                const auto &q_point =
-                  fe_face_values.quadrature_point(f_q_point);
-                for (uint d = 0; d < dim; ++d)
-                  vertex[d] = q_point[d];
-
-                interface_nodes_ids.emplace_back(
-                  precice.setMeshVertex(mesh_id, vertex.data()));
-              }
-          }
-
-    n_interface_nodes = interface_nodes_ids.size();
-
-    std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
+    std::cout << "\t Number of read nodes:     " << read_nodes_ids.size()
+              << std::endl;
+    std::cout << "\t Number of write nodes:     " << write_nodes_ids.size()
               << std::endl;
 
     // Initialize preCICE internally
@@ -263,7 +249,7 @@ namespace Adapter
         write_all_quadrature_nodes(dealii_to_precice,
                                    mapping,
                                    dof_handler,
-                                   face_quadrature);
+                                   write_quadrature);
 
         precice.markActionFulfilled(
           precice::constants::actionWriteInitialData());
@@ -280,14 +266,14 @@ namespace Adapter
     const VectorType &         dealii_to_precice,
     const DoFHandler<dim> &    dof_handler,
     const Mapping<dim> &       mapping,
-    const Quadrature<dim - 1> &face_quadrature,
+    const Quadrature<dim - 1> &write_quadrature,
     const double               computed_timestep_length)
   {
     if (precice.isWriteDataRequired(computed_timestep_length))
       write_all_quadrature_nodes(dealii_to_precice,
                                  mapping,
                                  dof_handler,
-                                 face_quadrature);
+                                 write_quadrature);
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
@@ -354,16 +340,16 @@ namespace Adapter
     const VectorType &         data,
     const Mapping<dim> &       mapping,
     const DoFHandler<dim> &    dof_handler,
-    const Quadrature<dim - 1> &face_quadrature)
+    const Quadrature<dim - 1> &write_quadrature)
   {
     FEFaceValues<dim>           fe_face_values(mapping,
                                      dof_handler.get_fe(),
-                                     face_quadrature,
+                                     write_quadrature,
                                      update_values);
-    std::vector<Vector<double>> quad_values(face_quadrature.size(),
+    std::vector<Vector<double>> quad_values(write_quadrature.size(),
                                             Vector<double>(dim));
     std::array<double, dim>     local_data;
-    auto                        index = interface_nodes_ids.begin();
+    auto                        index = write_nodes_ids.begin();
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
@@ -378,7 +364,7 @@ namespace Adapter
             for (const auto f_q_point :
                  fe_face_values.quadrature_point_indices())
               {
-                Assert(index != interface_nodes_ids.end(), ExcInternalError());
+                Assert(index != write_nodes_ids.end(), ExcInternalError());
                 // TODO: Check if the additional array is necessary. Maybe we
                 // can directly use quad_values[f_q_point].data() for preCICE
                 for (uint d = 0; d < dim; ++d)
@@ -404,6 +390,47 @@ namespace Adapter
     //      if (precice.isReadDataAvailable())
     precice.readVectorData(read_data_id, q_index, data.data());
   }
-} // namespace Adapter
 
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  void
+  Adapter<dim, VectorType, ParameterClass>::set_mesh_vertices(
+    const Mapping<dim> &       mapping,
+    const DoFHandler<dim> &    dof_handler,
+    const Quadrature<dim - 1> &quadrature,
+    const bool                 is_read_mesh)
+  {
+    const unsigned int mesh_id = is_read_mesh ? read_mesh_id : write_mesh_id;
+    auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
+
+    // TODO: Find a suitable guess for the number of interface points (optional)
+    interface_nodes_ids.reserve(20);
+    std::array<double, dim> vertex;
+    FEFaceValues<dim>       fe_face_values(mapping,
+                                     dof_handler.get_fe(),
+                                     quadrature,
+                                     update_quadrature_points);
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      for (const auto &face : cell->face_iterators())
+        if (face->at_boundary() == true &&
+            face->boundary_id() == dealii_boundary_interface_id)
+          {
+            fe_face_values.reinit(cell, face);
+
+            for (const auto f_q_point :
+                 fe_face_values.quadrature_point_indices())
+              {
+                const auto &q_point =
+                  fe_face_values.quadrature_point(f_q_point);
+                for (uint d = 0; d < dim; ++d)
+                  vertex[d] = q_point[d];
+
+                interface_nodes_ids.emplace_back(
+                  precice.setMeshVertex(mesh_id, vertex.data()));
+              }
+          }
+  }
+} // namespace Adapter
 #endif // ADAPTER_H

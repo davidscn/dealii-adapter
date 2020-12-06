@@ -729,10 +729,10 @@ namespace Linear_Elasticity
     // information to preCICE
     // TODO: Distinguish between read and write data
 
-    // TODO: generalize quadrature formula and open an exclusive class
     adapter.initialize(dof_handler,
                        mapping,
                        QEquidistant<dim - 1>(quad_order),
+                       QGauss<dim - 1>(quad_order),
                        displacement);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
