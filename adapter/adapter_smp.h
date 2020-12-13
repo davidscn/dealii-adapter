@@ -368,6 +368,8 @@ namespace Adapter
       }
   }
 
+
+
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::write_all_quadrature_nodes(
@@ -487,6 +489,8 @@ namespace Adapter
               }
           }
   }
+
+
 
   template <int dim, typename VectorType, typename ParameterClass>
   unsigned int
