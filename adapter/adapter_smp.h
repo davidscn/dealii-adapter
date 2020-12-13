@@ -2,6 +2,7 @@
 #define ADAPTER_H
 
 #include <deal.II/base/exceptions.h>
+#include <deal.II/base/std_cxx20/iota_view.h>
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_tools.h>
@@ -140,6 +141,11 @@ namespace Adapter
     read_on_quadrature_point(std::array<double, dim> &data,
                              const unsigned int       q_index) const;
 
+    /**
+     * @brief read_on_quadrature_point_with_ID Given the ID we want to access, returns the local data on each quad poin
+     * @param data
+     * @param q_index
+     */
     void
     read_on_quadrature_point_with_ID(Tensor<1, dim> &   data,
                                      const unsigned int q_index) const;
@@ -177,6 +183,7 @@ namespace Adapter
     std::vector<int>                     read_nodes_ids;
     std::vector<int>                     write_nodes_ids;
     std::map<unsigned int, unsigned int> read_id_map;
+    std::vector<double>                  read_data;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
@@ -247,6 +254,8 @@ namespace Adapter
     std::cout << "\t Number of write nodes:     " << write_nodes_ids.size()
               << std::endl;
 
+    read_data.resize(read_nodes_ids.size() * dim);
+
     // Initialize preCICE internally
     precice.initialize();
 
@@ -263,6 +272,11 @@ namespace Adapter
 
         precice.initializeData();
       }
+
+    precice.readBlockVectorData(read_data_id,
+                                read_nodes_ids.size(),
+                                read_nodes_ids.data(),
+                                read_data.data());
   }
 
 
@@ -285,6 +299,19 @@ namespace Adapter
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice.advance(computed_timestep_length);
+
+    if (precice.isReadDataAvailable())
+      precice.readBlockVectorData(read_data_id,
+                                  read_nodes_ids.size(),
+                                  read_nodes_ids.data(),
+                                  read_data.data());
+
+    // Alternative, if you don't want to store the indices
+    //    const int rsize = (1 / dim) * read_data.size();
+    //    if (precice.isReadDataAvailable())
+    //      for (const auto i : std_cxx20::ranges::iota_view<int, int>{0,
+    //      rsize})
+    //        precice.readVectorData(read_data_id, i, &read_data[i * dim]);
   }
 
 
@@ -407,12 +434,10 @@ namespace Adapter
     Tensor<1, dim> &   data,
     const unsigned int ID_index) const
   {
-    // TODO: Check if the if statement still makes sense
-    //      if (precice.isReadDataAvailable()
-    Assert(ID_index<234,ExcInternalError());
-	  precice.readVectorData(read_data_id,
-                           read_nodes_ids[ID_index],
-                           data.begin_raw());
+    // Assert the accesses index
+    AssertIndexRange(ID_index * dim + (dim - 1), read_data.size());
+    for (uint d = 0; d < dim; ++d)
+      data[d] = read_data[ID_index * dim + d];
   }
 
 
@@ -461,9 +486,6 @@ namespace Adapter
                   precice.setMeshVertex(mesh_id, vertex.data()));
               }
           }
-    if(is_read_mesh)
-    for(const auto i:read_nodes_ids)
-      std::cout << i << std::endl;
   }
 
   template <int dim, typename VectorType, typename ParameterClass>
