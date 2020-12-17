@@ -35,9 +35,11 @@ namespace Adapter
      *             in the parameters.prm file
      * @param[in]  deal_boundary_interface_id Boundary ID of the triangulation,
      *             which is associated with the coupling interface.
+     * @param[in]
      */
     Adapter(const ParameterClass &parameters,
-            const unsigned int    dealii_boundary_interface_id);
+            const unsigned int    dealii_boundary_interface_id,
+            const bool            shared_memory_parallel);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -49,12 +51,7 @@ namespace Adapter
      *             individual configuration and preCICE determines it
      *             automatically. In many cases, this data will just represent
      *             your initial condition.
-     * @param[out] precice_to_deal Data, which is received from preCICE/ from
-     *             other participants. Wether this data is useful already in
-     *             the beginning depends on your individual configuration and
-     *             preCICE determines it automatically. In many cases, this
-     *             data will just represent the initial condition of other
-     *             participants.
+     * TODO
      */
     void
     initialize(const DoFHandler<dim> &    dof_handler,
@@ -75,6 +72,7 @@ namespace Adapter
      *             after each time step and exchanged with other participants.
      * @param[in]  computed_timestep_length Length of the timestep used by
      *             the solver.
+     * TODO
      */
     void
     advance(const VectorType &         dealii_to_precice,
@@ -123,9 +121,103 @@ namespace Adapter
                                  Time &                     time_class);
 
     /**
-     * @brief public precice solverinterface
+     * @brief read_on_quadrature_point Returns the dim dimensional read data
+     *        given the ID of the interface node we want to access. The ID needs
+     *        to be associated to the 'read' mesh. The function is in practice
+     *        used together with @p begin_interface_IDs() (see below), so that
+     *        we can iterate over all IDs consecutively. The function is not
+     *        thread safe since the used preCICE function is not thread safe.
+     *        Also, the functionality assumes that we iterate during the
+     *        initialization in the same way over the interface than during the
+     *        assembly step.
+     *
+     * @param[out] data dim dimensional data associated to the interface node
+     * @param[in]  vertex_id preCICE related index of the read_data vertex
      */
+    void
+    read_on_quadrature_point(std::array<double, dim> &data,
+                             const unsigned int       vertex_id) const;
 
+    /**
+     * @brief begin_interface_IDs Returns an iterator of the interface node IDs
+     *        of the 'read' mesh´. Allows to iterate over the read node IDs.
+     */
+    auto
+    begin_interface_IDs() const;
+
+    /**
+     * @brief read_on_quadrature_point_fron_block_data Reads data from a block
+     *        data set and returns values associated to a quadrature point.
+     *
+     *        As opposed to @p read_on_quadrature_point(), this function reads
+     *        data from a class-own vector, i.e., it is assumed that the read
+     *        data has been copied from preCICE using `readBlockVectorData()`.
+     *        As a consequence, no preCICE functionality is used throughout this
+     *        function and it is thread safe. If a thread safe implementation is
+     *        not required, please use @p read_on_quadrature_point(). In order
+     *        to obtain the @param block_data_id, the function @p get_block_data_id
+     *        (see below) can be used.
+     *
+     * @param[out] data coupling data to be filled by the function
+     * @param[in]  block_data_id index of the data point in the block data set
+     */
+    void
+    read_on_quadrature_point_from_block_data(
+      Tensor<1, dim> &   data,
+      const unsigned int block_data_id) const;
+
+    /**
+     * @brief get_block_data_id Returns the data id of the first data point in
+     *        the class vector as described in
+     *        @p read_on_quadrature_point_from_block_data given the global face
+     *        index. Hence, the function is supposed to be only called once per
+     *        interface. All consequent read operations for the remaining data
+     *        of the other quadrature points can be performed by simply adding
+     *        the local index of the quadrature point because the data is
+     *        ordered contiguous for each element. The whole lookup might look
+     *       the following way
+     * @code
+     *  // Loop over all cells
+     *  for (const auto &face : cell->face_iterators())
+     *  // Check if we are at a coupling interface
+     *  if (face->boundary_id() == interface_id)
+     *    {
+     *      // Initialize the FE on this cell
+     *      fe_face_values_ref.reinit(cell, face);
+     *      // Get the data first data ID for this cell
+     *      const unsigned int precice_id = adapter.get_block_data_id(
+     *        cell->face_index(cell->face_iterator_to_index(face)));
+     *
+     *      // Initialize vector for values at each quad point
+     *      Tensor<1, dim> precice_data;
+     *
+     *      for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
+     *           ++f_q_point)
+     *        {
+     *          // Get data with the ID
+     *          adapter.read_on_quadrature_point_from_block_data(precice_data,
+     *                                                           precice_id +
+     *                                                             f_q_point);
+     *          ... do stuff with precice_data
+     *        }
+     *     }
+     * @endcode
+     *
+     *        The reason for calling the function only once per face is that it
+     *        looks for the data ID in a map and we want to reduce the map look
+     *        ups as much as possible.
+     *
+     * @param[in] face_id Global face index as obtained by cell->face_index
+     *
+     * @return The first id of the data in the class-own data vector, which holds
+     *         a copy of the preCICE read data.
+     */
+    unsigned int
+    get_block_data_id(const unsigned int face_id) const;
+
+
+    // public precice solverinterface, needed in order to steer the time loop
+    // inside the solver.
     precice::SolverInterface precice;
 
     // Boundary ID of the deal.II mesh, associated with the coupling
@@ -135,17 +227,6 @@ namespace Adapter
     // the boundary e.g. clamped one.
     const unsigned int dealii_boundary_interface_id;
 
-
-    void
-    read_on_quadrature_point(std::array<double, dim> &data,
-                             const unsigned int       q_index) const;
-
-
-    auto
-    begin_interface_IDs() const
-    {
-      return read_nodes_ids.begin();
-    }
 
   private:
     // preCICE related initializations
@@ -161,31 +242,55 @@ namespace Adapter
 
     // These IDs are given by preCICE during initialization
     int read_mesh_id;
-    int write_mesh_id;
     int read_data_id;
+    int write_mesh_id;
     int write_data_id;
 
-
+    const bool shared_memory_parallel;
     // Data containers which are passed to preCICE in an appropriate preCICE
     // specific format
     std::vector<int> read_nodes_ids;
     std::vector<int> write_nodes_ids;
+    // Only required for shared parallelism
+    std::map<unsigned int, unsigned int> read_id_map;
+    std::vector<double>                  read_data;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
     double                  old_time_value;
 
-    void
-    write_all_quadrature_nodes(const VectorType &         data,
-                               const Mapping<dim> &       mapping,
-                               const DoFHandler<dim> &    dof_handler,
-                               const Quadrature<dim - 1> &write_quadrature);
-
+    /**
+     * @brief set_mesh_vertices Define a vertex coupling mesh for preCICE coupling
+     *
+     * @param[in] mapping Mapping to be used
+     * @param[in] dof_handler DofHandler to be used
+     * @param[in] Quadrature Quadrature defining the node locations of the mesh
+     *            in each element.
+     * @param[in] is_read_mesh Defines whether the mesh is associated to a aread
+     *            or a write mesh
+     */
     void
     set_mesh_vertices(const Mapping<dim> &       mapping,
                       const DoFHandler<dim> &    dof_handler,
                       const Quadrature<dim - 1> &quadrature,
                       const bool                 is_read_mesh);
+
+    /**
+     * @brief write_all_quadrature_nodes Evaluates the given @param data at the
+     *        quadrature_points of the given @param write_quadrature formula and
+     *        passes it to preCICE
+     *
+     * @param[in] data The data to be passed to preCICE (absolute displacement
+     *            for FSI)
+     * @param[in] mapping Mapping to be used
+     * @param[in] dof_handler DofHandler to be used
+     * @param[in] write_quadrature Quadrature formula to be used.
+     */
+    void
+    write_all_quadrature_nodes(const VectorType &         data,
+                               const Mapping<dim> &       mapping,
+                               const DoFHandler<dim> &    dof_handler,
+                               const Quadrature<dim - 1> &write_quadrature);
   };
 
 
@@ -193,7 +298,8 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   Adapter<dim, VectorType, ParameterClass>::Adapter(
     const ParameterClass &parameters,
-    const unsigned int    dealii_boundary_interface_id)
+    const unsigned int    dealii_boundary_interface_id,
+    const bool            shared_memory_parallel)
     : precice(parameters.participant_name,
               parameters.config_file,
               this_mpi_process,
@@ -203,6 +309,7 @@ namespace Adapter
     , write_mesh_name(parameters.write_mesh_name)
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
+    , shared_memory_parallel(shared_memory_parallel)
   {}
 
 
@@ -235,10 +342,13 @@ namespace Adapter
     set_mesh_vertices(mapping, dof_handler, write_quadrature, false);
     set_mesh_vertices(mapping, dof_handler, read_quadrature, true);
 
-    std::cout << "\t Number of read nodes:     " << read_nodes_ids.size()
-              << std::endl;
-    std::cout << "\t Number of write nodes:     " << write_nodes_ids.size()
-              << std::endl;
+    std::cout << "\t Number of read nodes:" << std::setw(4)
+              << read_nodes_ids.size() << std::endl;
+    std::cout << "\t Number of write nodes:" << std::setw(4)
+              << write_nodes_ids.size() << std::endl;
+
+    if (shared_memory_parallel)
+      read_data.resize(read_nodes_ids.size() * dim);
 
     // Initialize preCICE internally
     precice.initialize();
@@ -256,6 +366,12 @@ namespace Adapter
 
         precice.initializeData();
       }
+
+    if (shared_memory_parallel && precice.isReadDataAvailable())
+      precice.readBlockVectorData(read_data_id,
+                                  read_nodes_ids.size(),
+                                  read_nodes_ids.data(),
+                                  read_data.data());
   }
 
 
@@ -278,6 +394,19 @@ namespace Adapter
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice.advance(computed_timestep_length);
+
+    if (shared_memory_parallel && precice.isReadDataAvailable())
+      precice.readBlockVectorData(read_data_id,
+                                  read_nodes_ids.size(),
+                                  read_nodes_ids.data(),
+                                  read_data.data());
+
+    // Alternative, if you don't want to store the indices
+    //    const int rsize = (1 / dim) * read_data.size();
+    //    if (precice.isReadDataAvailable())
+    //      for (const auto i : std_cxx20::ranges::iota_view<int, int>{0,
+    //      rsize})
+    //        precice.readVectorData(read_data_id, i, &read_data[i * dim]);
   }
 
 
@@ -334,6 +463,8 @@ namespace Adapter
       }
   }
 
+
+
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::write_all_quadrature_nodes(
@@ -380,15 +511,31 @@ namespace Adapter
   }
 
 
+
   template <int dim, typename VectorType, typename ParameterClass>
-  void
+  inline void
   Adapter<dim, VectorType, ParameterClass>::read_on_quadrature_point(
     std::array<double, dim> &data,
-    const unsigned int       q_index) const
+    const unsigned int       vertex_id) const
   {
     // TODO: Check if the if statement still makes sense
     //      if (precice.isReadDataAvailable())
-    precice.readVectorData(read_data_id, q_index, data.data());
+    precice.readVectorData(read_data_id, vertex_id, data.data());
+  }
+
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  inline void
+  Adapter<dim, VectorType, ParameterClass>::
+    read_on_quadrature_point_from_block_data(
+      Tensor<1, dim> &   data,
+      const unsigned int block_data_id) const
+  {
+    // Assert the accessed index
+    AssertIndexRange(block_data_id * dim + (dim - 1), read_data.size());
+    for (uint d = 0; d < dim; ++d)
+      data[d] = read_data[block_data_id * dim + d];
   }
 
 
@@ -404,6 +551,7 @@ namespace Adapter
     const unsigned int mesh_id = is_read_mesh ? read_mesh_id : write_mesh_id;
     auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
 
+
     // TODO: Find a suitable guess for the number of interface points (optional)
     interface_nodes_ids.reserve(20);
     std::array<double, dim> vertex;
@@ -412,12 +560,18 @@ namespace Adapter
                                      quadrature,
                                      update_quadrature_points);
 
+    // Loop over all elements and evaluate data at quadrature points
     for (const auto &cell : dof_handler.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true &&
             face->boundary_id() == dealii_boundary_interface_id)
           {
             fe_face_values.reinit(cell, face);
+
+              // Create a map for shared parallelism
+              if (shared_memory_parallel && is_read_mesh)
+                read_id_map[cell->face_index(cell->face_iterator_to_index(
+                  face))] = interface_nodes_ids.size();
 
             for (const auto f_q_point :
                  fe_face_values.quadrature_point_indices())
@@ -431,6 +585,25 @@ namespace Adapter
                   precice.setMeshVertex(mesh_id, vertex.data()));
               }
           }
+  }
+
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  auto
+  Adapter<dim, VectorType, ParameterClass>::begin_interface_IDs() const
+  {
+    return read_nodes_ids.begin();
+  }
+
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  unsigned int
+  Adapter<dim, VectorType, ParameterClass>::get_block_data_id(
+    const unsigned int face_id) const
+  {
+    return read_id_map.at(face_id);
   }
 } // namespace Adapter
 #endif // ADAPTER_H
