@@ -157,7 +157,7 @@ namespace Linear_Elasticity
     , body_force_enabled(parameters.body_force.norm() > 1e-15)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
-    , adapter(parameters, interface_boundary_id)
+    , adapter(parameters, interface_boundary_id, false)
     , case_path(case_path)
   {}
 

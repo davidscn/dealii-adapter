@@ -48,7 +48,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/adapter_smp.h"
+#include "../adapter/adapter.h"
 #include "../adapter/q_equidistant.h"
 #include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
@@ -349,7 +349,7 @@ namespace Nonlinear_Elasticity
     , case_path(case_path)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
-    , adapter(parameters, boundary_interface_id)
+    , adapter(parameters, boundary_interface_id, true)
   {}
 
   // Destructor clears the DoFHandler
@@ -1056,7 +1056,7 @@ namespace Nonlinear_Elasticity
           {
             scratch.fe_face_values_ref.reinit(cell, face);
 
-            const unsigned int precice_id = adapter.get_node_id(
+            const unsigned int precice_id = adapter.get_block_data_id(
               cell->face_index(cell->face_iterator_to_index(face)));
 
             // Initialize vector for values at each quad point
@@ -1065,9 +1065,10 @@ namespace Nonlinear_Elasticity
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
                  ++f_q_point)
               {
-                adapter.read_on_quadrature_point_with_ID(precice_data,
-                                                         precice_id +
-                                                           f_q_point);
+                adapter.read_on_quadrature_point_from_block_data(precice_data,
+                                                                 precice_id +
+                                                                   f_q_point);
+
                 // In the next step, we perform a pull_back operation, since our
                 // Fluid participant usually works with ALE methods and the
                 // structure solver here assembles everything in reference
