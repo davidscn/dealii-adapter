@@ -54,11 +54,11 @@ namespace Adapter
      * TODO
      */
     void
-    initialize(const DoFHandler<dim> &    dof_handler,
-               const Mapping<dim> &       mapping,
-               const Quadrature<dim - 1> &write_quadrature,
-               const Quadrature<dim - 1> &read_quadrature,
-               const VectorType &         dealii_to_precice);
+    initialize(const DoFHandler<dim> &                    dof_handler,
+               std::shared_ptr<Mapping<dim>>              mapping,
+               std::shared_ptr<const Quadrature<dim - 1>> write_quadrature,
+               std::shared_ptr<const Quadrature<dim - 1>> read_quadrature,
+               const VectorType &                         dealii_to_precice);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -75,11 +75,9 @@ namespace Adapter
      * TODO
      */
     void
-    advance(const VectorType &         dealii_to_precice,
-            const DoFHandler<dim> &    dof_handler,
-            const Mapping<dim> &       mapping,
-            const Quadrature<dim - 1> &write_quadrature,
-            const double               computed_timestep_length);
+    advance(const VectorType &     dealii_to_precice,
+            const DoFHandler<dim> &dof_handler,
+            const double           computed_timestep_length);
 
     /**
      * @brief      Saves current state of time dependent variables in case of an
@@ -259,21 +257,20 @@ namespace Adapter
     std::vector<VectorType> old_state_data;
     double                  old_time_value;
 
+    std::shared_ptr<const Quadrature<dim - 1>> write_quadrature;
+    std::shared_ptr<const Quadrature<dim - 1>> read_quadrature;
+    std::shared_ptr<Mapping<dim>>              mapping;
+
     /**
      * @brief set_mesh_vertices Define a vertex coupling mesh for preCICE coupling
      *
-     * @param[in] mapping Mapping to be used
      * @param[in] dof_handler DofHandler to be used
-     * @param[in] Quadrature Quadrature defining the node locations of the mesh
-     *            in each element.
      * @param[in] is_read_mesh Defines whether the mesh is associated to a aread
      *            or a write mesh
      */
     void
-    set_mesh_vertices(const Mapping<dim> &       mapping,
-                      const DoFHandler<dim> &    dof_handler,
-                      const Quadrature<dim - 1> &quadrature,
-                      const bool                 is_read_mesh);
+    set_mesh_vertices(const DoFHandler<dim> &dof_handler,
+                      const bool             is_read_mesh);
 
     /**
      * @brief write_all_quadrature_nodes Evaluates the given @param data at the
@@ -282,15 +279,12 @@ namespace Adapter
      *
      * @param[in] data The data to be passed to preCICE (absolute displacement
      *            for FSI)
-     * @param[in] mapping Mapping to be used
      * @param[in] dof_handler DofHandler to be used
      * @param[in] write_quadrature Quadrature formula to be used.
      */
     void
-    write_all_quadrature_nodes(const VectorType &         data,
-                               const Mapping<dim> &       mapping,
-                               const DoFHandler<dim> &    dof_handler,
-                               const Quadrature<dim - 1> &write_quadrature);
+    write_all_quadrature_nodes(const VectorType &     data,
+                               const DoFHandler<dim> &dof_handler);
   };
 
 
@@ -317,11 +311,11 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::initialize(
-    const DoFHandler<dim> &    dof_handler,
-    const Mapping<dim> &       mapping,
-    const Quadrature<dim - 1> &write_quadrature,
-    const Quadrature<dim - 1> &read_quadrature,
-    const VectorType &         dealii_to_precice)
+    const DoFHandler<dim> &                    dof_handler,
+    std::shared_ptr<Mapping<dim>>              mapping_,
+    std::shared_ptr<const Quadrature<dim - 1>> write_quadrature_,
+    std::shared_ptr<const Quadrature<dim - 1>> read_quadrature_,
+    const VectorType &                         dealii_to_precice)
   {
     AssertThrow(
       dim == precice.getDimensions(),
@@ -332,19 +326,23 @@ namespace Adapter
 
     AssertThrow(dim > 1, ExcNotImplemented());
 
-    // get precice specific IDs from precice and store them in the class
-    // they are later needed for data transfer
+
+    write_quadrature = write_quadrature_;
+    read_quadrature  = read_quadrature_;
+    mapping          = mapping_;
+    // get precice specific IDs from precice and store them in
+    // the class they are later needed for data transfer
     read_mesh_id  = precice.getMeshID(read_mesh_name);
     read_data_id  = precice.getDataID(read_data_name, read_mesh_id);
     write_mesh_id = precice.getMeshID(write_mesh_name);
     write_data_id = precice.getDataID(write_data_name, write_mesh_id);
 
-    set_mesh_vertices(mapping, dof_handler, write_quadrature, false);
-    set_mesh_vertices(mapping, dof_handler, read_quadrature, true);
+    set_mesh_vertices(dof_handler, false);
+    set_mesh_vertices(dof_handler, true);
 
-    std::cout << "\t Number of read nodes:" << std::setw(4)
+    std::cout << "\t Number of read nodes: " << std::setw(5)
               << read_nodes_ids.size() << std::endl;
-    std::cout << "\t Number of write nodes:" << std::setw(4)
+    std::cout << "\t Number of write nodes:" << std::setw(5)
               << write_nodes_ids.size() << std::endl;
 
     if (shared_memory_parallel)
@@ -356,10 +354,7 @@ namespace Adapter
     // write initial writeData to preCICE if required
     if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
       {
-        write_all_quadrature_nodes(dealii_to_precice,
-                                   mapping,
-                                   dof_handler,
-                                   write_quadrature);
+        write_all_quadrature_nodes(dealii_to_precice, dof_handler);
 
         precice.markActionFulfilled(
           precice::constants::actionWriteInitialData());
@@ -379,17 +374,12 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::advance(
-    const VectorType &         dealii_to_precice,
-    const DoFHandler<dim> &    dof_handler,
-    const Mapping<dim> &       mapping,
-    const Quadrature<dim - 1> &write_quadrature,
-    const double               computed_timestep_length)
+    const VectorType &     dealii_to_precice,
+    const DoFHandler<dim> &dof_handler,
+    const double           computed_timestep_length)
   {
     if (precice.isWriteDataRequired(computed_timestep_length))
-      write_all_quadrature_nodes(dealii_to_precice,
-                                 mapping,
-                                 dof_handler,
-                                 write_quadrature);
+      write_all_quadrature_nodes(dealii_to_precice, dof_handler);
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
@@ -468,16 +458,14 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::write_all_quadrature_nodes(
-    const VectorType &         data,
-    const Mapping<dim> &       mapping,
-    const DoFHandler<dim> &    dof_handler,
-    const Quadrature<dim - 1> &write_quadrature)
+    const VectorType &     data,
+    const DoFHandler<dim> &dof_handler)
   {
-    FEFaceValues<dim>           fe_face_values(mapping,
+    FEFaceValues<dim>           fe_face_values(*mapping,
                                      dof_handler.get_fe(),
-                                     write_quadrature,
+                                     *write_quadrature,
                                      update_values);
-    std::vector<Vector<double>> quad_values(write_quadrature.size(),
+    std::vector<Vector<double>> quad_values(write_quadrature->size(),
                                             Vector<double>(dim));
     std::array<double, dim>     local_data;
     auto                        index = write_nodes_ids.begin();
@@ -543,21 +531,20 @@ namespace Adapter
   template <int dim, typename VectorType, typename ParameterClass>
   void
   Adapter<dim, VectorType, ParameterClass>::set_mesh_vertices(
-    const Mapping<dim> &       mapping,
-    const DoFHandler<dim> &    dof_handler,
-    const Quadrature<dim - 1> &quadrature,
-    const bool                 is_read_mesh)
+    const DoFHandler<dim> &dof_handler,
+    const bool             is_read_mesh)
   {
     const unsigned int mesh_id = is_read_mesh ? read_mesh_id : write_mesh_id;
     auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
+    const auto quadrature = is_read_mesh ? read_quadrature : write_quadrature;
 
 
     // TODO: Find a suitable guess for the number of interface points (optional)
     interface_nodes_ids.reserve(20);
     std::array<double, dim> vertex;
-    FEFaceValues<dim>       fe_face_values(mapping,
+    FEFaceValues<dim>       fe_face_values(*mapping,
                                      dof_handler.get_fe(),
-                                     quadrature,
+                                     *quadrature,
                                      update_quadrature_points);
 
     // Loop over all elements and evaluate data at quadrature points
@@ -568,10 +555,10 @@ namespace Adapter
           {
             fe_face_values.reinit(cell, face);
 
-              // Create a map for shared parallelism
-              if (shared_memory_parallel && is_read_mesh)
-                read_id_map[cell->face_index(cell->face_iterator_to_index(
-                  face))] = interface_nodes_ids.size();
+            // Create a map for shared parallelism
+            if (shared_memory_parallel && is_read_mesh)
+              read_id_map[cell->face_index(cell->face_iterator_to_index(
+                face))] = interface_nodes_ids.size();
 
             for (const auto f_q_point :
                  fe_face_values.quadrature_point_indices())

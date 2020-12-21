@@ -98,11 +98,11 @@ namespace Linear_Elasticity
     const unsigned int interface_boundary_id;
 
     // Dealii typical objects
-    Triangulation<dim>   triangulation;
-    DoFHandler<dim>      dof_handler;
-    FESystem<dim>        fe;
-    MappingQGeneric<dim> mapping;
-    const unsigned int   quad_order;
+    Triangulation<dim>                    triangulation;
+    DoFHandler<dim>                       dof_handler;
+    FESystem<dim>                         fe;
+    std::shared_ptr<MappingQGeneric<dim>> mapping;
+    const unsigned int                    quad_order;
 
     AffineConstraints<double> hanging_node_constraints;
 
@@ -152,7 +152,7 @@ namespace Linear_Elasticity
     , interface_boundary_id(6)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
-    , mapping(MappingQGeneric<dim>(parameters.poly_degree))
+    , mapping(std::make_shared<MappingQGeneric<dim>>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
     , body_force_enabled(parameters.body_force.norm() > 1e-15)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
@@ -342,7 +342,7 @@ namespace Linear_Elasticity
   {
     QGauss<dim> quadrature_formula(quad_order);
 
-    FEValues<dim> fe_values(mapping,
+    FEValues<dim> fe_values(*mapping,
                             fe,
                             quadrature_formula,
                             update_values | update_gradients |
@@ -432,7 +432,7 @@ namespace Linear_Elasticity
       Functions::ConstantFunction<dim> rho_f(parameters.rho);
 
       MatrixCreator::create_mass_matrix(
-        mapping, dof_handler, QGauss<dim>(quad_order), mass_matrix, &rho_f);
+        *mapping, dof_handler, QGauss<dim>(quad_order), mass_matrix, &rho_f);
     }
 
     // Then, we save the system_matrix, which is needed every timestep
@@ -456,7 +456,7 @@ namespace Linear_Elasticity
         Functions::ConstantFunction<dim> bf_function(bf_vector);
 
         // Create the contribution to the right-hand side vector
-        VectorTools::create_right_hand_side(mapping,
+        VectorTools::create_right_hand_side(*mapping,
                                             dof_handler,
                                             QGauss<dim>(quad_order),
                                             bf_function,
@@ -478,7 +478,7 @@ namespace Linear_Elasticity
     // Quadrature formula for integration over faces (dim-1)
     QGauss<dim - 1> face_quadrature_formula(quad_order);
 
-    FEFaceValues<dim> fe_face_values(mapping,
+    FEFaceValues<dim> fe_face_values(*mapping,
                                      fe,
                                      face_quadrature_formula,
                                      update_values | update_quadrature_points |
@@ -728,11 +728,11 @@ namespace Linear_Elasticity
     // Then, we initialize preCICE i.e. we pass our mesh and coupling
     // information to preCICE
     // TODO: Distinguish between read and write data
-
     adapter.initialize(dof_handler,
                        mapping,
-                       QEquidistant<dim - 1>(quad_order),
-                       QGauss<dim - 1>(quad_order),
+                       std::make_shared<const QEquidistant<dim - 1>>(
+                         quad_order),
+                       std::make_shared<const QGauss<dim - 1>>(quad_order),
                        displacement);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
@@ -772,8 +772,6 @@ namespace Linear_Elasticity
         timer.enter_subsection("Advance adapter");
         adapter.advance(displacement,
                         dof_handler,
-                        mapping,
-                        QEquidistant<dim - 1>(quad_order),
                         time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 

@@ -29,7 +29,7 @@ QEquidistant<1>::QEquidistant(const unsigned int n)
   if (n == 0)
     return;
 
-  // Compute distant between points
+  // Compute distance between points
   const double point_distance = 1. / n;
   // Exclude boundaries
   double x_point = point_distance * 0.5;
