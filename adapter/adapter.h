@@ -55,7 +55,7 @@ namespace Adapter
      */
     void
     initialize(const DoFHandler<dim> &                    dof_handler,
-               std::shared_ptr<Mapping<dim>>              mapping,
+               std::shared_ptr<const Mapping<dim>>        mapping,
                std::shared_ptr<const Quadrature<dim - 1>> write_quadrature,
                std::shared_ptr<const Quadrature<dim - 1>> read_quadrature,
                const VectorType &                         dealii_to_precice);
@@ -259,7 +259,7 @@ namespace Adapter
 
     std::shared_ptr<const Quadrature<dim - 1>> write_quadrature;
     std::shared_ptr<const Quadrature<dim - 1>> read_quadrature;
-    std::shared_ptr<Mapping<dim>>              mapping;
+    std::shared_ptr<const Mapping<dim>>        mapping;
 
     /**
      * @brief set_mesh_vertices Define a vertex coupling mesh for preCICE coupling
@@ -312,7 +312,7 @@ namespace Adapter
   void
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &                    dof_handler,
-    std::shared_ptr<Mapping<dim>>              mapping_,
+    std::shared_ptr<const Mapping<dim>>        mapping_,
     std::shared_ptr<const Quadrature<dim - 1>> write_quadrature_,
     std::shared_ptr<const Quadrature<dim - 1>> read_quadrature_,
     const VectorType &                         dealii_to_precice)

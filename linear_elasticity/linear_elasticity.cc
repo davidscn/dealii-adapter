@@ -98,11 +98,11 @@ namespace Linear_Elasticity
     const unsigned int interface_boundary_id;
 
     // Dealii typical objects
-    Triangulation<dim>                    triangulation;
-    DoFHandler<dim>                       dof_handler;
-    FESystem<dim>                         fe;
-    std::shared_ptr<MappingQGeneric<dim>> mapping;
-    const unsigned int                    quad_order;
+    Triangulation<dim>                          triangulation;
+    DoFHandler<dim>                             dof_handler;
+    FESystem<dim>                               fe;
+    std::shared_ptr<const MappingQGeneric<dim>> mapping;
+    const unsigned int                          quad_order;
 
     AffineConstraints<double> hanging_node_constraints;
 
@@ -152,7 +152,8 @@ namespace Linear_Elasticity
     , interface_boundary_id(6)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
-    , mapping(std::make_shared<MappingQGeneric<dim>>(parameters.poly_degree))
+    , mapping(
+        std::make_shared<const MappingQGeneric<dim>>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
     , body_force_enabled(parameters.body_force.norm() > 1e-15)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
@@ -770,9 +771,7 @@ namespace Linear_Elasticity
         // participant to finish their time step. Therefore, we measure the
         // timings around this functionality
         timer.enter_subsection("Advance adapter");
-        adapter.advance(displacement,
-                        dof_handler,
-                        time.get_delta_t());
+        adapter.advance(displacement, dof_handler, time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 
         // Next, we reload the data we have previosuly stored in the beginning
