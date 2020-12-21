@@ -280,7 +280,6 @@ namespace Adapter
      * @param[in] data The data to be passed to preCICE (absolute displacement
      *            for FSI)
      * @param[in] dof_handler DofHandler to be used
-     * @param[in] write_quadrature Quadrature formula to be used.
      */
     void
     write_all_quadrature_nodes(const VectorType &     data,
