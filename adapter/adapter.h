@@ -233,6 +233,7 @@ namespace Adapter
     const std::string write_mesh_name;
     const std::string read_data_name;
     const std::string write_data_name;
+    const bool        read_write_on_same;
 
     // To be adjusted for MPI parallelized codes
     static constexpr unsigned int this_mpi_process = 0;
@@ -284,6 +285,9 @@ namespace Adapter
     void
     write_all_quadrature_nodes(const VectorType &     data,
                                const DoFHandler<dim> &dof_handler);
+
+    void
+    print_info() const;
   };
 
 
@@ -302,6 +306,7 @@ namespace Adapter
     , write_mesh_name(parameters.write_mesh_name)
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
+    , read_write_on_same(read_mesh_name == write_mesh_name)
     , shared_memory_parallel(shared_memory_parallel)
   {}
 
@@ -326,9 +331,10 @@ namespace Adapter
     AssertThrow(dim > 1, ExcNotImplemented());
 
 
-    write_quadrature = write_quadrature_;
-    read_quadrature  = read_quadrature_;
-    mapping          = mapping_;
+    write_quadrature =
+      read_write_on_same ? read_quadrature_ : write_quadrature_;
+    read_quadrature = read_quadrature_;
+    mapping         = mapping_;
     // get precice specific IDs from precice and store them in
     // the class they are later needed for data transfer
     read_mesh_id  = precice.getMeshID(read_mesh_name);
@@ -336,13 +342,12 @@ namespace Adapter
     write_mesh_id = precice.getMeshID(write_mesh_name);
     write_data_id = precice.getDataID(write_data_name, write_mesh_id);
 
-    set_mesh_vertices(dof_handler, false);
     set_mesh_vertices(dof_handler, true);
-
-    std::cout << "\t Number of read nodes: " << std::setw(5)
-              << read_nodes_ids.size() << std::endl;
-    std::cout << "\t Number of write nodes:" << std::setw(5)
-              << write_nodes_ids.size() << std::endl;
+    if (!read_write_on_same)
+      set_mesh_vertices(dof_handler, false);
+    else // TODO: Replace copy by some smart pointer
+      write_nodes_ids = read_nodes_ids;
+    print_info();
 
     if (shared_memory_parallel)
       read_data.resize(read_nodes_ids.size() * dim);
@@ -590,6 +595,28 @@ namespace Adapter
     const unsigned int face_id) const
   {
     return read_id_map.at(face_id);
+  }
+
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  void
+  Adapter<dim, VectorType, ParameterClass>::print_info() const
+  {
+    const unsigned int r_size = read_nodes_ids.size();
+    const unsigned int w_size = write_nodes_ids.size();
+    std::cout << "\t Read and write on same location: "
+              << (read_write_on_same ? "true" : "false") << std::endl;
+    std::cout << "\t Number of read nodes: " << std::setw(5) << r_size
+              << " ( = " << r_size / read_quadrature->size() << " [faces] x "
+              << read_quadrature->size() << " [nodes/face] ) \n"
+              << "\t Read node location: Gauss-Legendre" << std::endl;
+    std::cout << "\t Number of write nodes:" << std::setw(5) << w_size
+              << " ( = " << w_size / write_quadrature->size() << " [faces] x "
+              << write_quadrature->size() << " [nodes/face] ) \n"
+              << "\t Write node location: "
+              << (read_write_on_same ? "Gauss-Legendre" : "Equidistant") << "\n"
+              << std::endl;
   }
 } // namespace Adapter
 #endif // ADAPTER_H
