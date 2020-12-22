@@ -109,7 +109,7 @@ namespace Parameters
       " or a separate 'Read Mesh name' and a 'Write mesh name' in order to enable more mapping frindly "
       "specialized data locations at the interface. Specifying both or none of these "
       "options is invalid. Make sure you adjust your configuration file '" +
-      config_file + "'according to your settings.");
+      config_file + "' according to your settings.");
 
     if (read_mesh_name == write_mesh_name)
       {
