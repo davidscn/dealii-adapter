@@ -24,6 +24,7 @@ namespace Parameters
     std::string mesh_name;
     std::string read_mesh_name;
     std::string write_mesh_name;
+    int         write_sampling;
     std::string read_data_name;
     std::string write_data_name;
 
@@ -68,6 +69,12 @@ namespace Parameters
         "default",
         Patterns::Anything(),
         "Name of the write coupling mesh in the precice-config.xml file");
+      Patterns::Integer pattern(0);
+      prm.declare_entry("Write sampling",
+                        Patterns::Tools::Convert<int>::to_string(
+                          std::numeric_limits<int>::max(), pattern.clone()),
+                        pattern,
+                        "Nodes per coupling face of the write mesh");
       prm.declare_entry("Read data name",
                         "received-data",
                         Patterns::Anything(),
@@ -92,6 +99,7 @@ namespace Parameters
       mesh_name        = prm.get("Mesh name");
       read_mesh_name   = prm.get("Read mesh name");
       write_mesh_name  = prm.get("Write mesh name");
+      write_sampling   = prm.get_integer("Write sampling");
       read_data_name   = prm.get("Read data name");
       write_data_name  = prm.get("Write data name");
     }

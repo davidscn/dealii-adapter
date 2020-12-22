@@ -372,12 +372,11 @@ namespace Nonlinear_Elasticity
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    adapter.initialize(
-      dof_handler_ref,
-      std::make_shared<const MappingQ1<dim>>(),
-      std::make_shared<const QEquidistant<dim - 1>>(parameters.poly_degree + 2),
-      std::make_shared<const QGauss<dim - 1>>(parameters.poly_degree + 2),
-      total_displacement);
+    adapter.initialize(dof_handler_ref,
+                       std::make_shared<const MappingQ1<dim>>(),
+                       std::make_shared<const QGauss<dim - 1>>(
+                         parameters.poly_degree + 2),
+                       total_displacement);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 

@@ -56,7 +56,6 @@ namespace Adapter
     void
     initialize(const DoFHandler<dim> &                    dof_handler,
                std::shared_ptr<const Mapping<dim>>        mapping,
-               std::shared_ptr<const Quadrature<dim - 1>> write_quadrature,
                std::shared_ptr<const Quadrature<dim - 1>> read_quadrature,
                const VectorType &                         dealii_to_precice);
 
@@ -319,7 +318,6 @@ namespace Adapter
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &                    dof_handler,
     std::shared_ptr<const Mapping<dim>>        mapping_,
-    std::shared_ptr<const Quadrature<dim - 1>> write_quadrature_,
     std::shared_ptr<const Quadrature<dim - 1>> read_quadrature_,
     const VectorType &                         dealii_to_precice)
   {
@@ -332,9 +330,15 @@ namespace Adapter
 
     AssertThrow(dim > 1, ExcNotImplemented());
 
-
+    // Check if the value has been set or if we choose a default one
+    const int selected_sampling =
+      write_sampling == std::numeric_limits<int>::max() ?
+        read_quadrature_->size() :
+        write_sampling;
     write_quadrature =
-      read_write_on_same ? read_quadrature_ : write_quadrature_;
+      read_write_on_same ?
+        read_quadrature_ :
+        std::make_shared<const QEquidistant<dim - 1>>(selected_sampling);
     read_quadrature = read_quadrature_;
     mapping         = mapping_;
     // get precice specific IDs from precice and store them in
@@ -544,7 +548,6 @@ namespace Adapter
     auto &interface_nodes_ids = is_read_mesh ? read_nodes_ids : write_nodes_ids;
     const auto quadrature = is_read_mesh ? read_quadrature : write_quadrature;
 
-
     // TODO: Find a suitable guess for the number of interface points (optional)
     interface_nodes_ids.reserve(20);
     std::array<double, dim> vertex;
@@ -607,8 +610,19 @@ namespace Adapter
   {
     const unsigned int r_size = read_nodes_ids.size();
     const unsigned int w_size = write_nodes_ids.size();
+    const bool         warn_unused_write_option =
+      read_write_on_same && (write_sampling != std::numeric_limits<int>::max());
+    const std::string write_message =
+      ("Write sampling: " + std::to_string(write_quadrature->size()) +
+       (write_quadrature->size() == read_quadrature->size() ? " ( = Default )" :
+                                                              ""));
+
     std::cout << "\t Read and write on same location: "
-              << (read_write_on_same ? "true" : "false") << std::endl;
+              << (read_write_on_same ? "true" : "false") << "\n"
+              << (warn_unused_write_option ?
+                    "\t Ignoring specified write sampling." :
+                    "\t " + write_message)
+              << std::endl;
     std::cout << "\t Number of read nodes: " << std::setw(5) << r_size
               << " ( = " << r_size / read_quadrature->size() << " [faces] x "
               << read_quadrature->size() << " [nodes/face] ) \n"
@@ -617,7 +631,7 @@ namespace Adapter
               << " ( = " << w_size / write_quadrature->size() << " [faces] x "
               << write_quadrature->size() << " [nodes/face] ) \n"
               << "\t Write node location: "
-              << (read_write_on_same ? "Gauss-Legendre" : "Equidistant") << "\n"
+              << (read_write_on_same ? "Gauss-Legendre" : "equidistant") << "\n"
               << std::endl;
   }
 } // namespace Adapter

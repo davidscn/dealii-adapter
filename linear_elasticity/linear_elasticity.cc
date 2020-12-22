@@ -731,8 +731,6 @@ namespace Linear_Elasticity
     // TODO: Distinguish between read and write data
     adapter.initialize(dof_handler,
                        mapping,
-                       std::make_shared<const QEquidistant<dim - 1>>(
-                         quad_order),
                        std::make_shared<const QGauss<dim - 1>>(quad_order),
                        displacement);
 
