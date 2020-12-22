@@ -234,6 +234,7 @@ namespace Adapter
     const std::string read_data_name;
     const std::string write_data_name;
     const bool        read_write_on_same;
+    const int         write_sampling;
 
     // To be adjusted for MPI parallelized codes
     static constexpr unsigned int this_mpi_process = 0;
@@ -307,6 +308,7 @@ namespace Adapter
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
     , read_write_on_same(read_mesh_name == write_mesh_name)
+    , write_sampling(parameters.write_sampling)
     , shared_memory_parallel(shared_memory_parallel)
   {}
 

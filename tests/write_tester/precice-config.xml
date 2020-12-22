@@ -55,6 +55,6 @@
       <participants first="dealii" second="tester" />
       <exchange data="Displacement" mesh="dealii-mesh" from="dealii" to="tester" />
       <exchange data="Stress" mesh="tester-mesh" from="tester" to="dealii" />
-      </coupling-scheme:serial-explicit>
+    </coupling-scheme:serial-explicit>
   </solver-interface>
 </precice-configuration>
