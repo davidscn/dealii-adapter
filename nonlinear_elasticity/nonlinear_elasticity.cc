@@ -49,6 +49,7 @@
 #include <iostream>
 
 #include "../adapter/adapter.h"
+#include "../adapter/q_equidistant.h"
 #include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
 #include "include/parameter_handling.h"
@@ -151,8 +152,7 @@ namespace Nonlinear_Elasticity
     // represents it
     void
     assemble_system(const BlockVector<double> &solution_delta,
-                    const BlockVector<double> &acceleration,
-                    const BlockVector<double> &external_stress);
+                    const BlockVector<double> &acceleration);
 
     // We use a separate data structure to perform the assembly. It needs access
     // to some low-level data, so we simply befriend the class instead of
@@ -272,11 +272,6 @@ namespace Nonlinear_Elasticity
     // store these variables for implicit couplings.
     std::vector<BlockVector<double> *> state_variables;
 
-    // Global vector, which keeps all contributions of the Fluid participant
-    // i.e. stress data for assembly. This vector is filled properly in the
-    // Adapter
-    BlockVector<double> external_stress;
-
     // In order to measure some timings
     mutable TimerOutput timer;
 
@@ -354,7 +349,7 @@ namespace Nonlinear_Elasticity
     , case_path(case_path)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
-    , adapter(parameters, boundary_interface_id)
+    , adapter(parameters, boundary_interface_id, true)
   {}
 
   // Destructor clears the DoFHandler
@@ -378,9 +373,10 @@ namespace Nonlinear_Elasticity
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
     adapter.initialize(dof_handler_ref,
-                       MappingQ1<dim>(),
-                       total_displacement,
-                       external_stress);
+                       std::make_shared<const MappingQ1<dim>>(),
+                       std::make_shared<const QGauss<dim - 1>>(
+                         parameters.poly_degree + 2),
+                       total_displacement);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
@@ -411,7 +407,7 @@ namespace Nonlinear_Elasticity
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
         adapter.advance(total_displacement,
-                        external_stress,
+                        dof_handler_ref,
                         time.get_delta_t());
 
         timer.leave_subsection("Advance adapter");
@@ -621,7 +617,6 @@ namespace Nonlinear_Elasticity
     // TODO: Estimate acc properly in case of body forces
     acceleration.reinit(total_displacement);
     acceleration_old.reinit(total_displacement);
-    external_stress.reinit(total_displacement);
 
     // Alias: Container, which holds references for all time dependent variables
     // to enable a compact notation
@@ -701,7 +696,7 @@ namespace Nonlinear_Elasticity
         // lineraized step
         update_acceleration(solution_delta);
 
-        assemble_system(solution_delta, acceleration, external_stress);
+        assemble_system(solution_delta, acceleration);
 
         // Residual error = rhs error
         get_error_residual(error_residual);
@@ -921,8 +916,6 @@ namespace Nonlinear_Elasticity
       std::vector<Tensor<2, dim, NumberType>> solution_grads_u_total;
       std::vector<Tensor<1, dim, NumberType>> local_acceleration;
 
-      const BlockVector<double> &external_stress;
-
       FEValues<dim>     fe_values_ref;
       FEFaceValues<dim> fe_face_values_ref;
 
@@ -938,13 +931,11 @@ namespace Nonlinear_Elasticity
                       const QGauss<dim - 1> &    qf_face,
                       const UpdateFlags          uf_face,
                       const BlockVector<double> &solution_total,
-                      const BlockVector<double> &acceleration,
-                      const BlockVector<double> &external_stress)
+                      const BlockVector<double> &acceleration)
         : solution_total(solution_total)
         , acceleration(acceleration)
         , solution_grads_u_total(qf_cell.size())
         , local_acceleration(qf_cell.size())
-        , external_stress(external_stress)
         , fe_values_ref(fe_cell, qf_cell, uf_cell)
         , fe_face_values_ref(fe_cell, qf_face, uf_face)
         , grad_Nx(qf_cell.size(),
@@ -963,7 +954,6 @@ namespace Nonlinear_Elasticity
         , acceleration(rhs.acceleration)
         , solution_grads_u_total(rhs.solution_grads_u_total)
         , local_acceleration(rhs.local_acceleration)
-        , external_stress(rhs.external_stress)
         , fe_values_ref(rhs.fe_values_ref.get_fe(),
                         rhs.fe_values_ref.get_quadrature(),
                         rhs.fe_values_ref.get_update_flags())
@@ -1052,30 +1042,31 @@ namespace Nonlinear_Elasticity
       ScratchData_ASM &                                     scratch,
       PerTaskData_ASM &                                     data)
     {
-      const unsigned int & n_q_points_f      = data.solid->n_q_points_f;
-      const unsigned int & dofs_per_cell     = data.solid->dofs_per_cell;
-      const FESystem<dim> &fe                = data.solid->fe;
-      const unsigned int & u_dof             = data.solid->u_dof;
-      const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
-      const unsigned int &interf_id = data.solid->boundary_interface_id;
+      const unsigned int & n_q_points_f  = data.solid->n_q_points_f;
+      const unsigned int & dofs_per_cell = data.solid->dofs_per_cell;
+      const FESystem<dim> &fe            = data.solid->fe;
+      const unsigned int & u_dof         = data.solid->u_dof;
+      const unsigned int & interf_id     = data.solid->boundary_interface_id;
+      const auto &         adapter       = data.solid->adapter;
 
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true && face->boundary_id() == interf_id)
           {
             scratch.fe_face_values_ref.reinit(cell, face);
 
-            // Initialize vector for values at each quad point
-            std::vector<Tensor<1, dim, NumberType>> local_stress(n_q_points_f);
+            const unsigned int precice_id = adapter.get_block_data_id(
+              cell->face_index(cell->face_iterator_to_index(face)));
 
-            // Then, we extract the proper values from the global
-            // external_stress vector, which has already been filled with the
-            // coupling data
-            scratch.fe_face_values_ref[u_fe].get_function_values(
-              scratch.external_stress, local_stress);
+            // Initialize vector for values at each quad point
+            Tensor<1, dim> precice_data;
 
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
                  ++f_q_point)
               {
+                adapter.read_on_quadrature_point_from_block_data(precice_data,
+                                                                 precice_id +
+                                                                   f_q_point);
+
                 // In the next step, we perform a pull_back operation, since our
                 // Fluid participant usually works with ALE methods and the
                 // structure solver here assembles everything in reference
@@ -1085,8 +1076,8 @@ namespace Nonlinear_Elasticity
                     scratch.solution_grads_u_total[f_q_point]);
 
                 const Tensor<1, dim, NumberType> referential_stress =
-                  Physics::Transformations::Covariant::pull_back(
-                    local_stress[f_q_point], F);
+                  Physics::Transformations::Covariant::pull_back(precice_data,
+                                                                 F);
 
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                   {
@@ -1297,8 +1288,7 @@ namespace Nonlinear_Elasticity
   void
   Solid<dim, NumberType>::assemble_system(
     const BlockVector<double> &solution_delta,
-    const BlockVector<double> &acceleration,
-    const BlockVector<double> &external_stress)
+    const BlockVector<double> &acceleration)
   {
     timer.enter_subsection("Assemble linear system");
     std::cout << " ASM " << std::flush;
@@ -1315,14 +1305,7 @@ namespace Nonlinear_Elasticity
     typename Assembler_Base<dim, NumberType>::PerTaskData_ASM per_task_data(
       this);
     typename Assembler_Base<dim, NumberType>::ScratchData_ASM scratch_data(
-      fe,
-      qf_cell,
-      uf_cell,
-      qf_face,
-      uf_face,
-      solution_total,
-      acceleration,
-      external_stress);
+      fe, qf_cell, uf_cell, qf_face, uf_face, solution_total, acceleration);
 
     Assembler<dim, NumberType> assembler;
 

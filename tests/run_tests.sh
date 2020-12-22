@@ -7,6 +7,8 @@ NOCOLOR='\033[0m'
 # Run from this directory
 cd ${0%/*} || exit 1
 
+exit_code=0
+
 test_dir=$(pwd)
 
 print_start(){
@@ -17,10 +19,11 @@ print_start(){
 print_result() {
 	if [ $? -eq 0 ]
 	then
-  		echo -ne "${GREEN} passed ${NOCOLOR}\n"
+            echo -ne "${GREEN} passed ${NOCOLOR}\n"
 	else
-    		echo -ne "${RED} failed ${NOCOLOR}\n"
-		cat $@.log	
+            echo -ne "${RED} failed ${NOCOLOR}\n"
+            exit_code=$[$exit_code +1]
+            cat $@.log
 	fi
 	mv $@.log $test_dir
 }
@@ -28,7 +31,7 @@ print_result() {
 test_name="linear-elasticity-building"
 print_start ${test_name}
 cd ../linear_elasticity
-time (cmake . && make debug && make all) &>${test_name}.log 
+time (cmake . && make debug && make all) &>${test_name}.log
 print_result ${test_name}
 
 test_name="nonlinear-elasticity-building"
@@ -70,4 +73,10 @@ sed -i '2d' solution-1.vtk
 numdiff  solution-1.vtk ./reference/${test_name}.output &>${test_name}.log
 print_result ${test_name}
 
-echo "All tests finished"
+if [ $exit_code -eq 0 ]
+then
+    echo "All tests passed."
+else
+    echo "Errors occurred: $exit_code tests failed."
+    exit 1
+fi
