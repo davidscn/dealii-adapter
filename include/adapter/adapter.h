@@ -13,7 +13,7 @@
 #include <adapter/time_handler.h>
 #include <precice/SolverInterface.hpp>
 
-
+// Dummy change
 namespace Adapter
 {
   using namespace dealii;
