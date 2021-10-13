@@ -121,7 +121,7 @@ namespace Heat_Transfer
   };
 
 
-
+  // Some dummy comment to be removed
   template <int dim>
   class RightHandSide : public Function<dim>
   {
